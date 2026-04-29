@@ -8,11 +8,14 @@ import {
 } from "react-native";
 import MapView, { Marker } from "react-native-maps";
 import * as Location from "expo-location";
+import { useAuth } from "@/context/AuthContext";
+import { supabase } from "@/lib/supabase";
 
 const Home = () => {
   const [location, setLocation] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [searching, setSearching] = useState(false);
+  const { user } = useAuth();
 
   useEffect(() => {
     let subscription: any;
@@ -50,14 +53,61 @@ const Home = () => {
     };
   }, []);
 
-  const requestMechanic = () => {
-    setSearching(true);
+ const requestMechanic = async () => {
+  if (!user) {
+    alert("User not logged in");
+    return;
+  }
 
-    setTimeout(() => {
-      console.log("Mechanic found (mock)");
-      setSearching(false);
-    }, 4000);
-  };
+  if (!location) {
+    alert("Location not ready yet");
+    return;
+  }
+
+  console.log("Sending location:", location); // 🔥 DEBUG
+
+  const { data, error } = await supabase
+    .from("requests")
+    .insert({
+      user_id: user.id,
+      latitude: location.latitude,
+      longitude: location.longitude,
+      status: "pending",
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.log(error.message);
+    alert("Failed to request mechanic");
+    setSearching(false);
+    return;
+  }
+
+  console.log("Request created:", data);
+
+  // 🔥 Listen for mechanic acceptance
+  supabase
+    .channel("request-updates")
+    .on(
+      "postgres_changes",
+      {
+        event: "UPDATE",
+        schema: "public",
+        table: "requests",
+        filter: `id=eq.${data.id}`,
+      },
+      (payload) => {
+        const updated = payload.new;
+
+        if (updated.status === "accepted") {
+          setSearching(false);
+          alert("Mechanic is on the way 🚗");
+        }
+      }
+    )
+    .subscribe();
+};
 
   if (loading || !location) {
     return (

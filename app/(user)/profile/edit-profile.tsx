@@ -6,16 +6,68 @@ import {
   Image,
   ScrollView,
 } from "react-native";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { StatusBar } from "expo-status-bar";
 import { useTheme } from "@/context/ThemeContext";
 import { Switch } from "react-native";
+import { useAuth } from "@/context/AuthContext";
+import { supabase } from "@/lib/supabase";
 
 export default function EditProfile() {
   const { theme, toggleTheme } = useTheme();
+  const { user, loading } = useAuth();
+
+  const [profile, setProfile] = useState<any>(null);
+
+  // ✅ initials function (FIXED POSITION)
+  const getInitials = (name: string) => {
+    if (!name) return "?";
+    const parts = name.trim().split(" ");
+    if (parts.length === 1) return parts[0][0].toUpperCase();
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  };
+
+  // 🔥 Fetch profile
+  useEffect(() => {
+    if (!user) return;
+
+    const getProfile = async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", user.id)
+        .single();
+
+      if (error) console.log(error.message);
+      else setProfile(data);
+    };
+
+    getProfile();
+  }, [user]);
+
+  // 🔥 Protect route
+  useEffect(() => {
+    if (!loading && !user) {
+      router.replace("/(auth)/login");
+    }
+  }, [user, loading]);
+
+  // 🔥 Logout
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    router.replace("/(auth)/login");
+  };
+
+  if (loading || !profile) {
+    return (
+      <View style={styles.loader}>
+        <Text>Loading...</Text>
+      </View>
+    );
+  }
 
   return (
     <SafeAreaView
@@ -26,27 +78,39 @@ export default function EditProfile() {
 
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         
-        {/* Header */}
+        {/* HEADER */}
         <View style={styles.header}>
-          <Image
-            source={{ uri: "https://i.pravatar.cc/150?img=12" }}
-            style={styles.avatar}
-          />
+
+          {/* ✅ Avatar with fallback */}
+          {profile?.avatar_url ? (
+            <Image
+              source={{ uri: profile.avatar_url }}
+              style={styles.avatar}
+            />
+          ) : (
+            <View
+              style={[
+                styles.avatarFallback,
+                { backgroundColor: theme.colors.primary },
+              ]}
+            >
+              <Text style={styles.initials}>
+                {getInitials(profile?.username || user?.email)}
+              </Text>
+            </View>
+          )}
+
           <Text style={[styles.name, { color: theme.colors.text }]}>
-            Isaac Kiiza
+            {profile.username || "No Name"}
           </Text>
+
           <Text style={[styles.email, { color: theme.colors.subtitle }]}>
-            isaac@email.com
+            {profile.email || user.email}
           </Text>
         </View>
 
-        {/* Account Card */}
-        <View
-          style={[
-            styles.card,
-            { backgroundColor: theme.colors.card }
-          ]}
-        >
+        {/* ACCOUNT */}
+        <View style={[styles.card, { backgroundColor: theme.colors.card }]}>
           <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
             Account
           </Text>
@@ -73,13 +137,8 @@ export default function EditProfile() {
           />
         </View>
 
-        {/* Settings Card */}
-        <View
-          style={[
-            styles.card,
-            { backgroundColor: theme.colors.card }
-          ]}
-        >
+        {/* SETTINGS */}
+        <View style={[styles.card, { backgroundColor: theme.colors.card }]}>
           <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
             Settings
           </Text>
@@ -94,20 +153,13 @@ export default function EditProfile() {
           {/* DARK MODE */}
           <View style={styles.switchItem}>
             <View style={styles.itemLeft}>
-              <Ionicons
-                name="moon-outline"
-                size={20}
-                color={theme.colors.text}
-              />
+              <Ionicons name="moon-outline" size={20} color={theme.colors.text} />
               <Text style={[styles.itemText, { color: theme.colors.text }]}>
                 Dark Mode
               </Text>
             </View>
 
-            <Switch
-              value={theme.darkMode}
-              onValueChange={toggleTheme}
-            />
+            <Switch value={theme.darkMode} onValueChange={toggleTheme} />
           </View>
 
           <ProfileItem
@@ -118,20 +170,19 @@ export default function EditProfile() {
           />
         </View>
 
-        {/* Spacer */}
         <View style={{ flex: 1 }} />
 
-        {/* SWITCH TO MECHANIC */}
-<Pressable
-  style={[styles.switchRole, { backgroundColor: theme.colors.primary }]}
-  onPress={() => router.replace("/(mechanic)/dashboard")}
->
-  <Ionicons name="construct-outline" size={20} color="#fff" />
-  <Text style={styles.switchText}>Switch to Mechanic Mode</Text>
-</Pressable>
+        {/* SWITCH ROLE */}
+        <Pressable
+          style={[styles.switchRole, { backgroundColor: theme.colors.primary }]}
+          onPress={() => router.replace("/(mechanic)/dashboard")}
+        >
+          <Ionicons name="construct-outline" size={20} color="#fff" />
+          <Text style={styles.switchText}>Switch to Mechanic Mode</Text>
+        </Pressable>
 
-        {/* Logout */}
-        <Pressable style={styles.logout}onPress={() => router.replace("/(auth)/login")}>
+        {/* LOGOUT */}
+        <Pressable style={styles.logout} onPress={handleLogout}>
           <Ionicons name="log-out-outline" size={20} color="#fff" />
           <Text style={styles.logoutText}>Logout</Text>
         </Pressable>
@@ -141,7 +192,7 @@ export default function EditProfile() {
   );
 }
 
-/* Reusable Item */
+/* ITEM */
 function ProfileItem({ icon, label, onPress, theme }: any) {
   return (
     <Pressable style={styles.item} onPress={onPress}>
@@ -151,26 +202,25 @@ function ProfileItem({ icon, label, onPress, theme }: any) {
           {label}
         </Text>
       </View>
-
-      <Ionicons
-        name="chevron-forward"
-        size={18}
-        color={theme.colors.subtitle}
-      />
+      <Ionicons name="chevron-forward" size={18} color={theme.colors.subtitle} />
     </Pressable>
   );
 }
 
-/* Styles (only layout, no colors) */
+/* STYLES */
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-  },
+  safeArea: { flex: 1 },
 
   scrollContainer: {
     flexGrow: 1,
     paddingHorizontal: 20,
     paddingBottom: 20,
+  },
+
+  loader: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
   },
 
   header: {
@@ -184,6 +234,21 @@ const styles = StyleSheet.create({
     height: 90,
     borderRadius: 45,
     marginBottom: 10,
+  },
+
+  avatarFallback: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+
+  initials: {
+    color: "#fff",
+    fontSize: 28,
+    fontWeight: "900",
   },
 
   name: {
@@ -249,18 +314,18 @@ const styles = StyleSheet.create({
   },
 
   switchRole: {
-  flexDirection: "row",
-  padding: 15,
-  borderRadius: 12,
-  justifyContent: "center",
-  alignItems: "center",
-  gap: 10,
-  marginTop: 10,
-},
+    flexDirection: "row",
+    padding: 15,
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 10,
+    marginTop: 10,
+  },
 
-switchText: {
-  color: "#fff",
-  fontWeight: "bold",
-  fontSize: 16,
-},
+  switchText: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 16,
+  },
 });
