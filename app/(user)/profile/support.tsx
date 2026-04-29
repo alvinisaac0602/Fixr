@@ -17,11 +17,11 @@ const Support = () => {
   const { theme } = useTheme();
 
   const handleCall = () => {
-    Linking.openURL("tel:+256700000000");
+    Linking.openURL("tel:+256789186476");
   };
 
   const handleEmail = () => {
-    Linking.openURL("mailto:support@luma.com");
+    Linking.openURL("mailto:kiizaisaacalvin256@gmail.com");
   };
 
   return (

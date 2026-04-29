@@ -1,3 +1,5 @@
+// app/(onboarding)/onboarding.tsx
+
 import {
   View,
   Text,
@@ -10,7 +12,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import React, { useRef, useState } from "react";
-import { useTheme } from "@/context/ThemeContext";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const { width, height } = Dimensions.get("window");
 
@@ -40,22 +42,25 @@ export default function OnboardingScreen() {
   const flatListRef = useRef<any>(null);
 
   const viewableItemsChanged = useRef(({ viewableItems }: any) => {
-    setCurrentIndex(viewableItems[0].index);
+    setCurrentIndex(viewableItems[0]?.index || 0);
   }).current;
 
   const viewConfig = useRef({ viewAreaCoveragePercentThreshold: 50 }).current;
 
-  const nextSlide = () => {
+  const nextSlide = async () => {
     if (currentIndex < slides.length - 1) {
       flatListRef.current.scrollToIndex({ index: currentIndex + 1 });
     } else {
+      // ✅ SAVE ONCE ON COMPLETION (THIS FIXES YOUR ISSUE)
+      await AsyncStorage.setItem("hasSeenWelcomeFlow", "true");
+
+      // go to welcome or login (your choice)
       router.replace("/(onboarding)/welcome");
     }
   };
 
   return (
     <View style={styles.container}>
-      {/* Status bar styling */}
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
       <FlatList
@@ -69,26 +74,27 @@ export default function OnboardingScreen() {
         viewabilityConfig={viewConfig}
         renderItem={({ item }) => (
           <ImageBackground source={item.image} style={styles.image}>
-            {/* Overlay */}
             <View style={styles.overlay} />
 
-            {/* SAFE AREA CONTENT */}
             <SafeAreaView style={styles.safeContent}>
-              
-              {/* TEXT */}
               <View style={styles.textContainer}>
                 <Text style={styles.title}>{item.title}</Text>
                 <Text style={styles.subtitle}>{item.subtitle}</Text>
               </View>
-
             </SafeAreaView>
           </ImageBackground>
         )}
       />
 
-      {/* FOOTER (Safe Area Protected) */}
+      {/* FOOTER */}
       <SafeAreaView style={styles.footer}>
-        <Text style={styles.skip} onPress={() => router.replace("/(onboarding)/welcome")}>
+        <Text
+          style={styles.skip}
+          onPress={async () => {
+            await AsyncStorage.setItem("hasSeenWelcomeFlow", "true");
+            router.replace("/(onboarding)/welcome");
+          }}
+        >
           Skip
         </Text>
 
@@ -104,7 +110,7 @@ export default function OnboardingScreen() {
           ))}
         </View>
 
-        <Text style={styles.next} onPress={nextSlide}>
+        <Text onPress={nextSlide} style={styles.next}>
           {currentIndex === slides.length - 1 ? "Start" : "Next"}
         </Text>
       </SafeAreaView>

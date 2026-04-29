@@ -1,5 +1,3 @@
-// app/(onboarding)/welcome.tsx
-
 import {
   View,
   Text,
@@ -12,13 +10,12 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import React, { useEffect, useRef } from "react";
-import { useTheme } from "@/context/ThemeContext";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export default function Welcome() {
   const glowAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    // 🔥 subtle glowing pulse animation
     Animated.loop(
       Animated.sequence([
         Animated.timing(glowAnim, {
@@ -40,12 +37,24 @@ export default function Welcome() {
     outputRange: [0.3, 0.7],
   });
 
+  const handleContinue = async () => {
+    // mark flow as completed
+    await AsyncStorage.setItem("hasSeenWelcomeFlow", "true");
+
+    router.replace("/(auth)/login");
+  };
+
   return (
     <LinearGradient
       colors={["#2E1065", "#4C1D95", "#6D28D9"]}
       style={styles.container}
     >
-      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+      {/* ✅ FIXED STATUS BAR */}
+      <StatusBar
+        barStyle="light-content"
+        backgroundColor="transparent"
+        translucent={true}
+      />
 
       {/* Glow layer */}
       <Animated.View
@@ -65,7 +74,6 @@ export default function Welcome() {
 
         {/* CENTER */}
         <View style={styles.center}>
-          {/* Floating icon */}
           <View style={styles.iconBubble}>
             <Text style={styles.icon}>🚗🔧</Text>
           </View>
@@ -84,7 +92,7 @@ export default function Welcome() {
               styles.button,
               pressed && { transform: [{ scale: 0.98 }] },
             ]}
-            onPress={() => router.replace("/(auth)/login")}
+            onPress={handleContinue}
           >
             <Text style={styles.buttonText}>Get Started</Text>
           </Pressable>
@@ -122,17 +130,17 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
 
- top: {
-  marginTop: 20,
-},
+  top: {
+    marginTop: 20,
+  },
 
-logo: {
-  fontSize: 30,
-  fontWeight: "900",
-  color: "#FFFFFF",
-  letterSpacing: 1,
-  textAlign: "center",
-},
+  logo: {
+    fontSize: 30,
+    fontWeight: "900",
+    color: "#FFFFFF",
+    letterSpacing: 1,
+    textAlign: "center",
+  },
 
   center: {
     flex: 1,

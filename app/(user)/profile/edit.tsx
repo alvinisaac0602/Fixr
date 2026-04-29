@@ -6,15 +6,108 @@ import {
   Pressable,
   Image,
   StatusBar,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  ActivityIndicator,
 } from "react-native";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useTheme } from "@/context/ThemeContext";
+import { useAuth } from "@/context/AuthContext";
+import { supabase } from "@/lib/supabase";
+import * as ImagePicker from "expo-image-picker";
 
 const Edit = () => {
   const { theme } = useTheme();
+  const { user } = useAuth();
+
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [avatar, setAvatar] = useState(
+    "https://i.pravatar.cc/150?img=12"
+  );
+  const [loading, setLoading] = useState(true);
+
+  // ========================
+  // LOAD PROFILE
+  // ========================
+  useEffect(() => {
+    const fetchProfile = async () => {
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", user.id)
+        .single();
+
+      if (data) {
+        setName(data.full_name || "");
+        setEmail(data.email || "");
+        setPhone(data.phone || "");
+        setAvatar(data.avatar_url || "https://i.pravatar.cc/150?img=12");
+      }
+
+      setLoading(false);
+    };
+
+    fetchProfile();
+  }, [user]);
+
+  // ========================
+  // PICK IMAGE
+  // ========================
+  const pickImage = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 1,
+    });
+
+    if (!result.canceled) {
+      setAvatar(result.assets[0].uri);
+    }
+  };
+
+  // ========================
+  // SAVE TO SUPABASE
+  // ========================
+  const handleSave = async () => {
+    if (!user) return;
+
+    const { error } = await supabase
+      .from("profiles")
+      .update({
+        full_name: name,
+        email,
+        phone,
+        avatar_url: avatar,
+        updated_at: new Date(),
+      })
+      .eq("id", user.id);
+
+    if (!error) {
+      router.back();
+    } else {
+      console.log("Update error:", error.message);
+    }
+  };
+
+  // ========================
+  // LOADING STATE
+  // ========================
+  if (loading) {
+    return (
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <ActivityIndicator size="large" />
+      </View>
+    );
+  }
 
   return (
     <SafeAreaView
@@ -22,89 +115,102 @@ const Edit = () => {
     >
       <StatusBar barStyle={theme.darkMode ? "light-content" : "dark-content"} />
 
-      {/* Header */}
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
-        </Pressable>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        <ScrollView
+          contentContainerStyle={{ flexGrow: 1, paddingBottom: 30 }}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* HEADER */}
+          <View style={styles.header}>
+            <Pressable onPress={() => router.back()}>
+              <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
+            </Pressable>
 
-        <Text style={[styles.headerTitle, { color: theme.colors.text }]}>
-          Edit Profile
-        </Text>
+            <Text style={[styles.headerTitle, { color: theme.colors.text }]}>
+              Edit Profile
+            </Text>
 
-        <View style={{ width: 24 }} />
-      </View>
+            <View style={{ width: 24 }} />
+          </View>
 
-      {/* Profile Image */}
-      <View style={styles.avatarContainer}>
-        <Image
-          source={{ uri: "https://i.pravatar.cc/150?img=12" }}
-          style={styles.avatar}
-        />
+          {/* AVATAR */}
+          <View style={styles.avatarContainer}>
+            <Image source={{ uri: avatar }} style={styles.avatar} />
 
-        <Pressable style={styles.changePhotoBtn}>
-          <Ionicons name="camera-outline" size={16} color="#2563EB" />
-          <Text style={styles.changePhotoText}>Change Photo</Text>
-        </Pressable>
-      </View>
+            <Pressable style={styles.changePhotoBtn} onPress={pickImage}>
+              <Ionicons name="camera-outline" size={16} color="#2563EB" />
+              <Text style={styles.changePhotoText}>Change Photo</Text>
+            </Pressable>
+          </View>
 
-      {/* Form */}
-      <View style={styles.form}>
-        <Text style={[styles.label, { color: theme.colors.subtitle }]}>
-          Full Name
-        </Text>
-        <TextInput
-          placeholder="Enter your name"
-          placeholderTextColor={theme.colors.subtitle}
-          style={[
-            styles.input,
-            {
-              backgroundColor: theme.colors.card,
-              color: theme.colors.text,
-              borderColor: theme.colors.border,
-            },
-          ]}
-        />
+          {/* FORM */}
+          <View style={styles.form}>
+            <Text style={[styles.label, { color: theme.colors.subtitle }]}>
+              Full Name
+            </Text>
+            <TextInput
+              value={name}
+              onChangeText={setName}
+              placeholder="Enter your name"
+              placeholderTextColor={theme.colors.subtitle}
+              style={[
+                styles.input,
+                {
+                  backgroundColor: theme.colors.card,
+                  color: theme.colors.text,
+                  borderColor: theme.colors.border,
+                },
+              ]}
+            />
 
-        <Text style={[styles.label, { color: theme.colors.subtitle }]}>
-          Email
-        </Text>
-        <TextInput
-          placeholder="Enter your email"
-          placeholderTextColor={theme.colors.subtitle}
-          keyboardType="email-address"
-          style={[
-            styles.input,
-            {
-              backgroundColor: theme.colors.card,
-              color: theme.colors.text,
-              borderColor: theme.colors.border,
-            },
-          ]}
-        />
+            <Text style={[styles.label, { color: theme.colors.subtitle }]}>
+              Email
+            </Text>
+            <TextInput
+              value={email}
+              onChangeText={setEmail}
+              placeholder="Enter your email"
+              placeholderTextColor={theme.colors.subtitle}
+              keyboardType="email-address"
+              style={[
+                styles.input,
+                {
+                  backgroundColor: theme.colors.card,
+                  color: theme.colors.text,
+                  borderColor: theme.colors.border,
+                },
+              ]}
+            />
 
-        <Text style={[styles.label, { color: theme.colors.subtitle }]}>
-          Phone
-        </Text>
-        <TextInput
-          placeholder="Enter your phone"
-          placeholderTextColor={theme.colors.subtitle}
-          keyboardType="phone-pad"
-          style={[
-            styles.input,
-            {
-              backgroundColor: theme.colors.card,
-              color: theme.colors.text,
-              borderColor: theme.colors.border,
-            },
-          ]}
-        />
-      </View>
+            <Text style={[styles.label, { color: theme.colors.subtitle }]}>
+              Phone
+            </Text>
+            <TextInput
+              value={phone}
+              onChangeText={setPhone}
+              placeholder="Enter your phone"
+              placeholderTextColor={theme.colors.subtitle}
+              keyboardType="phone-pad"
+              style={[
+                styles.input,
+                {
+                  backgroundColor: theme.colors.card,
+                  color: theme.colors.text,
+                  borderColor: theme.colors.border,
+                },
+              ]}
+            />
+          </View>
 
-      {/* Save Button */}
-      <Pressable style={styles.saveBtn}>
-        <Text style={styles.saveText}>Save Changes</Text>
-      </Pressable>
+          {/* SAVE BUTTON */}
+          <Pressable style={styles.saveBtn} onPress={handleSave}>
+            <Text style={styles.saveText}>Save Changes</Text>
+          </Pressable>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 };

@@ -6,23 +6,26 @@ import {
   Image,
   ScrollView,
 } from "react-native";
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { StatusBar } from "expo-status-bar";
 import { useTheme } from "@/context/ThemeContext";
 import { Switch } from "react-native";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabase";
+import { useCallback } from "react";
 
 export default function EditProfile() {
   const { theme, toggleTheme } = useTheme();
   const { user, loading } = useAuth();
 
-  const [profile, setProfile] = useState<any>(null);
+  const [profile, setProfile] = useState<any>({});
 
-  // ✅ initials function (FIXED POSITION)
+  // =========================
+  // INITIALS
+  // =========================
   const getInitials = (name: string) => {
     if (!name) return "?";
     const parts = name.trim().split(" ");
@@ -30,38 +33,41 @@ export default function EditProfile() {
     return (parts[0][0] + parts[1][0]).toUpperCase();
   };
 
-  // 🔥 Fetch profile
-  useEffect(() => {
-    if (!user) return;
+  // =========================
+  // REFRESH PROFILE ON FOCUS
+  // =========================
+  useFocusEffect(
+    useCallback(() => {
+      if (!user) return;
 
-    const getProfile = async () => {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", user.id)
-        .single();
+      const getProfile = async () => {
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", user.id)
+          .single();
 
-      if (error) console.log(error.message);
-      else setProfile(data);
-    };
+        if (!error && data) {
+          setProfile(data);
+        }
+      };
 
-    getProfile();
-  }, [user]);
+      getProfile();
+    }, [user])
+  );
 
-  // 🔥 Protect route
-  useEffect(() => {
-    if (!loading && !user) {
-      router.replace("/(auth)/login");
-    }
-  }, [user, loading]);
-
-  // 🔥 Logout
+  // =========================
+  // LOGOUT
+  // =========================
   const handleLogout = async () => {
     await supabase.auth.signOut();
     router.replace("/(auth)/login");
   };
 
-  if (loading || !profile) {
+  // =========================
+  // LOADING
+  // =========================
+  if (loading) {
     return (
       <View style={styles.loader}>
         <Text>Loading...</Text>
@@ -77,11 +83,11 @@ export default function EditProfile() {
       <StatusBar style={theme.darkMode ? "light" : "dark"} />
 
       <ScrollView contentContainerStyle={styles.scrollContainer}>
-        
+
         {/* HEADER */}
         <View style={styles.header}>
 
-          {/* ✅ Avatar with fallback */}
+          {/* AVATAR */}
           {profile?.avatar_url ? (
             <Image
               source={{ uri: profile.avatar_url }}
@@ -95,17 +101,19 @@ export default function EditProfile() {
               ]}
             >
               <Text style={styles.initials}>
-                {getInitials(profile?.username || user?.email)}
+                {getInitials(profile?.full_name || profile?.username || "")}
               </Text>
             </View>
           )}
 
+          {/* NAME */}
           <Text style={[styles.name, { color: theme.colors.text }]}>
-            {profile.username || "No Name"}
+            {profile.full_name || profile.username || "No Name"}
           </Text>
 
+          {/* EMAIL */}
           <Text style={[styles.email, { color: theme.colors.subtitle }]}>
-            {profile.email || user.email}
+            {profile.email || user?.email}
           </Text>
         </View>
 
@@ -169,8 +177,6 @@ export default function EditProfile() {
             onPress={() => router.push("/(user)/profile/support")}
           />
         </View>
-
-        <View style={{ flex: 1 }} />
 
         {/* SWITCH ROLE */}
         <Pressable
