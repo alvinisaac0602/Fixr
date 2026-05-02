@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   StyleSheet,
   View,
@@ -8,6 +8,7 @@ import {
   FlatList,
 } from "react-native";
 import MapView, { Marker } from "react-native-maps";
+import MapViewDirections from "react-native-maps-directions";
 import * as Location from "expo-location";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
@@ -16,35 +17,40 @@ import { router } from "expo-router";
 const Dashboard = () => {
   const { user, loading: authLoading } = useAuth();
 
+  const mapRef = useRef<MapView>(null);
+
   const [location, setLocation] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [online, setOnline] = useState(false);
   const [requests, setRequests] = useState<any[]>([]);
+  const [selectedRequest, setSelectedRequest] = useState<any>(null);
+  const [routeInfo, setRouteInfo] = useState<any>(null);
 
-  // 🔒 Protect route
+  // 👤 NEW: customer profile
+  const [customerProfile, setCustomerProfile] = useState<any>(null);
+
+  // 🔐 Auth check
   useEffect(() => {
     if (!authLoading && !user) {
       router.replace("/(auth)/login");
     }
   }, [user, authLoading]);
 
-  // 📍 Get location
+  // 📍 Get mechanic location
   useEffect(() => {
     (async () => {
-      let { status } = await Location.requestForegroundPermissionsAsync();
+      const { status } =
+        await Location.requestForegroundPermissionsAsync();
 
-      if (status !== "granted") {
-        alert("Permission denied");
-        return;
-      }
+      if (status !== "granted") return;
 
-      let loc = await Location.getCurrentPositionAsync({});
+      const loc = await Location.getCurrentPositionAsync({});
       setLocation(loc.coords);
       setLoading(false);
     })();
   }, []);
 
-  // 📡 Fetch pending requests
+  // 📡 Fetch requests
   useEffect(() => {
     const fetchRequests = async () => {
       const { data, error } = await supabase
@@ -58,17 +64,13 @@ const Dashboard = () => {
     fetchRequests();
   }, []);
 
-  // ⚡ Realtime new requests
+  // 🔥 Realtime
   useEffect(() => {
     const channel = supabase
       .channel("new-requests")
       .on(
         "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "requests",
-        },
+        { event: "INSERT", schema: "public", table: "requests" },
         (payload) => {
           setRequests((prev) => [payload.new, ...prev]);
         }
@@ -80,8 +82,19 @@ const Dashboard = () => {
     };
   }, []);
 
-  // ✅ Accept request
-  const acceptRequest = async (requestId: string) => {
+  // 👤 FETCH CUSTOMER (NEW)
+  const fetchCustomer = async (userId: string) => {
+    const { data } = await supabase
+      .from("profiles")
+      .select("name, phone")
+      .eq("id", userId)
+      .single();
+
+    setCustomerProfile(data);
+  };
+
+  // ✅ ACCEPT REQUEST
+  const acceptRequest = async (request: any) => {
     if (!user) return;
 
     const { error } = await supabase
@@ -90,16 +103,40 @@ const Dashboard = () => {
         status: "accepted",
         mechanic_id: user.id,
       })
-      .eq("id", requestId);
+      .eq("id", request.id);
 
-    if (error) {
-      alert("Failed to accept request");
-    } else {
-      // remove from UI
-      setRequests((prev) => prev.filter((r) => r.id !== requestId));
+    if (!error) {
+      setSelectedRequest(request);
+
+      // 🔥 GET CUSTOMER DETAILS
+      fetchCustomer(request.user_id);
+
+      setRequests((prev) =>
+        prev.filter((item) => item.id !== request.id)
+      );
     }
   };
 
+  // ❌ CANCEL JOB (NEW)
+  const cancelAcceptedRequest = async () => {
+    if (!selectedRequest) return;
+
+    const { error } = await supabase
+      .from("requests")
+      .update({
+        status: "cancelled",
+        mechanic_id: null,
+      })
+      .eq("id", selectedRequest.id);
+
+    if (!error) {
+      setSelectedRequest(null);
+      setCustomerProfile(null);
+      setRouteInfo(null);
+    }
+  };
+
+  // 🔴 Toggle online
   const toggleOnline = () => {
     setOnline((prev) => !prev);
   };
@@ -115,8 +152,8 @@ const Dashboard = () => {
 
   return (
     <View style={styles.container}>
-      {/* MAP */}
       <MapView
+        ref={mapRef}
         style={styles.map}
         region={{
           latitude: location.latitude,
@@ -126,13 +163,50 @@ const Dashboard = () => {
         }}
         showsUserLocation
       >
-        <Marker
-          coordinate={{
-            latitude: location.latitude,
-            longitude: location.longitude,
-          }}
-          title="You (Mechanic)"
-        />
+        {/* MECHANIC */}
+        <Marker coordinate={location} title="You (Mechanic)" />
+
+        {/* CUSTOMER */}
+        {selectedRequest && (
+          <Marker
+            coordinate={{
+              latitude: selectedRequest.latitude,
+              longitude: selectedRequest.longitude,
+            }}
+            title="Customer"
+            pinColor="blue"
+          />
+        )}
+
+        {/* ROUTE */}
+        {selectedRequest && (
+          <MapViewDirections
+            origin={{
+              latitude: location.latitude,
+              longitude: location.longitude,
+            }}
+            destination={{
+              latitude: selectedRequest.latitude,
+              longitude: selectedRequest.longitude,
+            }}
+            apikey={process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || ""}
+            strokeWidth={4}
+            strokeColor="green"
+            onReady={(result) => {
+              setRouteInfo(result);
+
+              mapRef.current?.fitToCoordinates(result.coordinates, {
+                edgePadding: {
+                  top: 100,
+                  right: 50,
+                  bottom: 250,
+                  left: 50,
+                },
+                animated: true,
+              });
+            }}
+          />
+        )}
       </MapView>
 
       {/* STATUS */}
@@ -142,7 +216,7 @@ const Dashboard = () => {
         </Text>
       </View>
 
-      {/* BOTTOM PANEL */}
+      {/* BOTTOM */}
       <View style={styles.bottomCard}>
         <Text style={styles.title}>Mechanic Dashboard</Text>
 
@@ -158,15 +232,52 @@ const Dashboard = () => {
           </Text>
         </Pressable>
 
-        {/* 🔥 REQUESTS LIST */}
-        {online && (
+        {/* ROUTE INFO */}
+        {selectedRequest && routeInfo && (
+          <View style={styles.routeCard}>
+            <Text>
+              📏 Distance: {routeInfo.distance.toFixed(2)} km
+            </Text>
+            <Text>
+              ⏱️ ETA: {Math.ceil(routeInfo.duration)} mins
+            </Text>
+          </View>
+        )}
+
+        {/* 👤 CUSTOMER DETAILS (NEW FEATURE) */}
+        {selectedRequest && customerProfile && (
+          <View style={styles.routeCard}>
+            <Text style={{ fontWeight: "bold" }}>
+              👤 Customer Details
+            </Text>
+            <Text>Name: {customerProfile.name}</Text>
+            <Text>Phone: {customerProfile.phone}</Text>
+
+            <Pressable
+              onPress={cancelAcceptedRequest}
+              style={{
+                backgroundColor: "red",
+                padding: 10,
+                marginTop: 10,
+                borderRadius: 8,
+              }}
+            >
+              <Text style={{ color: "#fff", textAlign: "center" }}>
+                Cancel Job
+              </Text>
+            </Pressable>
+          </View>
+        )}
+
+        {/* REQUESTS */}
+        {online && !selectedRequest && (
           <>
-            <Text style={{ marginTop: 15, fontWeight: "bold" }}>
+            <Text style={styles.requestsTitle}>
               Incoming Requests
             </Text>
 
             {requests.length === 0 ? (
-              <Text style={{ color: "gray", marginTop: 10 }}>
+              <Text style={styles.noRequests}>
                 No requests yet...
               </Text>
             ) : (
@@ -179,9 +290,11 @@ const Dashboard = () => {
 
                     <Pressable
                       style={styles.acceptBtn}
-                      onPress={() => acceptRequest(item.id)}
+                      onPress={() => acceptRequest(item)}
                     >
-                      <Text style={{ color: "#fff" }}>Accept</Text>
+                      <Text style={{ color: "#fff" }}>
+                        Accept
+                      </Text>
                     </Pressable>
                   </View>
                 )}
@@ -198,7 +311,6 @@ export default Dashboard;
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-
   map: { flex: 1 },
 
   loader: {
@@ -214,12 +326,9 @@ const styles = StyleSheet.create({
     backgroundColor: "white",
     padding: 10,
     borderRadius: 20,
-    elevation: 5,
   },
 
-  statusText: {
-    fontWeight: "bold",
-  },
+  statusText: { fontWeight: "bold" },
 
   bottomCard: {
     position: "absolute",
@@ -229,13 +338,10 @@ const styles = StyleSheet.create({
     padding: 20,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: "50%",
+    maxHeight: "55%",
   },
 
-  title: {
-    fontSize: 20,
-    fontWeight: "bold",
-  },
+  title: { fontSize: 20, fontWeight: "bold" },
 
   button: {
     padding: 15,
@@ -249,6 +355,16 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
 
+  requestsTitle: {
+    marginTop: 15,
+    fontWeight: "bold",
+  },
+
+  noRequests: {
+    color: "gray",
+    marginTop: 10,
+  },
+
   requestCard: {
     backgroundColor: "#f5f5f5",
     padding: 12,
@@ -256,12 +372,18 @@ const styles = StyleSheet.create({
     marginTop: 10,
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
   },
 
   acceptBtn: {
     backgroundColor: "green",
     padding: 10,
     borderRadius: 8,
+  },
+
+  routeCard: {
+    marginTop: 15,
+    backgroundColor: "#f5f5f5",
+    padding: 12,
+    borderRadius: 10,
   },
 });

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   StyleSheet,
   View,
@@ -7,33 +7,50 @@ import {
   ActivityIndicator,
 } from "react-native";
 import MapView, { Marker } from "react-native-maps";
+import MapViewDirections from "react-native-maps-directions";
 import * as Location from "expo-location";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabase";
 
+type Request = {
+  id: string;
+  user_id: string;
+  latitude: number;
+  longitude: number;
+  status: string;
+  mechanic_id?: string | null;
+};
+
 const Home = () => {
+  const { user } = useAuth();
+  const mapRef = useRef<MapView>(null);
+
   const [location, setLocation] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [searching, setSearching] = useState(false);
-  const { user } = useAuth();
 
+  const [request, setRequest] = useState<Request | null>(null);
+  const [mechanic, setMechanic] = useState<any>(null);
+  const [mechanicLocation, setMechanicLocation] = useState<any>(null);
+  const [routeInfo, setRouteInfo] = useState<any>(null);
+
+  // 👤 NEW: mechanic profile display
+  const [mechanicProfile, setMechanicProfile] = useState<any>(null);
+
+  // 📍 LOCATION
   useEffect(() => {
     let subscription: any;
 
     (async () => {
-      let { status } = await Location.requestForegroundPermissionsAsync();
+      const { status } =
+        await Location.requestForegroundPermissionsAsync();
 
-      if (status !== "granted") {
-        alert("Permission to access location denied");
-        return;
-      }
+      if (status !== "granted") return;
 
-      // 🔥 initial location
-      let loc = await Location.getCurrentPositionAsync({});
+      const loc = await Location.getCurrentPositionAsync({});
       setLocation(loc.coords);
       setLoading(false);
 
-      // 🔥 LIVE tracking (important upgrade)
       subscription = await Location.watchPositionAsync(
         {
           accuracy: Location.Accuracy.High,
@@ -46,68 +63,110 @@ const Home = () => {
       );
     })();
 
-    return () => {
-      if (subscription) {
-        subscription.remove();
-      }
-    };
+    return () => subscription?.remove();
   }, []);
 
- const requestMechanic = async () => {
-  if (!user) {
-    alert("User not logged in");
-    return;
-  }
+  // 🔧 REQUEST MECHANIC
+  const requestMechanic = async () => {
+    if (!user || !location) return;
 
-  if (!location) {
-    alert("Location not ready yet");
-    return;
-  }
+    try {
+      setSearching(true);
 
-  console.log("Sending location:", location); // 🔥 DEBUG
+      const { data, error } = await supabase
+        .from("requests")
+        .insert({
+          user_id: user.id,
+          latitude: location.latitude,
+          longitude: location.longitude,
+          status: "pending",
+        })
+        .select()
+        .single();
 
-  const { data, error } = await supabase
-    .from("requests")
-    .insert({
-      user_id: user.id,
-      latitude: location.latitude,
-      longitude: location.longitude,
-      status: "pending",
-    })
-    .select()
-    .single();
-
-  if (error) {
-    console.log(error.message);
-    alert("Failed to request mechanic");
-    setSearching(false);
-    return;
-  }
-
-  console.log("Request created:", data);
-
-  // 🔥 Listen for mechanic acceptance
-  supabase
-    .channel("request-updates")
-    .on(
-      "postgres_changes",
-      {
-        event: "UPDATE",
-        schema: "public",
-        table: "requests",
-        filter: `id=eq.${data.id}`,
-      },
-      (payload) => {
-        const updated = payload.new;
-
-        if (updated.status === "accepted") {
-          setSearching(false);
-          alert("Mechanic is on the way 🚗");
-        }
+      if (error || !data) {
+        setSearching(false);
+        return;
       }
-    )
-    .subscribe();
-};
+
+      setRequest(data);
+
+      // realtime listener
+      const channel = supabase
+        .channel("request-" + data.id)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "requests",
+            filter: `id=eq.${data.id}`,
+          },
+          (payload) => {
+            const updated = payload.new as Request;
+
+            setRequest(updated);
+
+            // ✅ ACCEPTED
+            if (updated?.status === "accepted") {
+              setSearching(false);
+              fetchMechanic(updated.mechanic_id!);
+            }
+
+            // ❌ CANCELLED
+            if (updated?.status === "cancelled") {
+              setSearching(false);
+              resetState();
+            }
+          }
+        )
+        .subscribe();
+
+      return () => supabase.removeChannel(channel);
+    } catch (e) {
+      setSearching(false);
+    }
+  };
+
+  // 👤 FETCH MECHANIC DETAILS (NEW FIX)
+  const fetchMechanic = async (mechanicId: string) => {
+    const { data } = await supabase
+      .from("profiles")
+      .select("name, phone")
+      .eq("id", mechanicId)
+      .single();
+
+    setMechanicProfile(data);
+
+    const { data: loc } = await supabase
+      .from("mechanics_live")
+      .select("*")
+      .eq("mechanic_id", mechanicId)
+      .single();
+
+    setMechanicLocation(loc);
+  };
+
+  // ❌ CANCEL REQUEST (USER SIDE)
+  const cancelRequest = async () => {
+    if (!request) return;
+
+    await supabase
+      .from("requests")
+      .update({ status: "cancelled" })
+      .eq("id", request.id);
+
+    resetState();
+  };
+
+  const resetState = () => {
+    setSearching(false);
+    setRequest(null);
+    setMechanic(null);
+    setMechanicLocation(null);
+    setMechanicProfile(null);
+    setRouteInfo(null);
+  };
 
   if (loading || !location) {
     return (
@@ -120,61 +179,66 @@ const Home = () => {
 
   return (
     <View style={styles.container}>
-
-      {/* 🗺️ FULL SCREEN MAP */}
       <MapView
-  style={StyleSheet.absoluteFillObject}
-  initialRegion={{
-    latitude: location.latitude,
-    longitude: location.longitude,
-    latitudeDelta: 0.01,
-    longitudeDelta: 0.01,
-  }}
-  showsUserLocation={true}
-  showsMyLocationButton={true}
-  followsUserLocation={true}
+        ref={mapRef}
+        style={StyleSheet.absoluteFillObject}
+        region={{
+          latitude: location.latitude,
+          longitude: location.longitude,
+          latitudeDelta: 0.01,
+          longitudeDelta: 0.01,
+        }}
+        showsUserLocation={false}
+      >
+        <Marker coordinate={location} title="You" />
+      </MapView>
 
-  // 🔥 KEY FIX: pushes Google controls upward
-  mapPadding={{
-    top: 0,
-    right: 20,
-    bottom: 120, // 👈 pushes "target button" above your bottom card
-    left: 0,
-  }}
->
-  <Marker
-    coordinate={{
-      latitude: location.latitude,
-      longitude: location.longitude,
-    }}
-    title="You are here"
-  />
-</MapView>
-
-      {/* 🔍 SEARCH OVERLAY */}
+      {/* SEARCHING STATE */}
       {searching && (
         <View style={styles.searchOverlay}>
-          <ActivityIndicator size="large" color="black" />
-          <Text style={styles.searchText}>
-            Searching for available mechanics...
-          </Text>
-        </View>
-      )}
+          <ActivityIndicator size="large" />
+          <Text>Searching for mechanic...</Text>
 
-      {/* 🔧 BOTTOM CARD */}
-      {!searching && (
-        <View style={styles.bottomCard}>
-          <Text style={styles.title}>Need a Mechanic?</Text>
-          <Text style={styles.subtitle}>
-            We’ll find one near your location
-          </Text>
-
-          <Pressable style={styles.button} onPress={requestMechanic}>
-            <Text style={styles.buttonText}>Request Mechanic 🔧</Text>
+          <Pressable style={styles.cancelBtn} onPress={cancelRequest}>
+            <Text style={{ color: "#fff" }}>Cancel Request</Text>
           </Pressable>
         </View>
       )}
 
+      {/* 🚨 ACCEPTED STATE (NEW UI) */}
+      {request?.status === "accepted" && mechanicProfile && (
+        <View style={styles.searchOverlay}>
+          <Text style={{ fontSize: 18, fontWeight: "bold" }}>
+            Mechanic Assigned 🚗
+          </Text>
+
+          <Text>Name: {mechanicProfile.name}</Text>
+          <Text>Phone: {mechanicProfile.phone}</Text>
+
+          <Pressable
+            style={styles.cancelBtn}
+            onPress={cancelRequest}
+          >
+            <Text style={{ color: "#fff" }}>Cancel Request</Text>
+          </Pressable>
+        </View>
+      )}
+
+      {/* DEFAULT UI */}
+      {!searching && !request && (
+        <View style={styles.bottomCard}>
+          <Text>Need a Mechanic?</Text>
+
+          <Pressable
+            onPress={requestMechanic}
+            style={styles.button}
+          >
+            <Text style={styles.buttonText}>
+              Request Mechanic
+            </Text>
+          </Pressable>
+        </View>
+      )}
     </View>
   );
 };
@@ -182,66 +246,38 @@ const Home = () => {
 export default Home;
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#fff",
-  },
-
-  loader: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-
+  container: { flex: 1 },
+  loader: { flex: 1, justifyContent: "center", alignItems: "center" },
   bottomCard: {
     position: "absolute",
     bottom: 0,
     width: "100%",
     backgroundColor: "white",
     padding: 20,
-    borderTopLeftRadius: 25,
-    borderTopRightRadius: 25,
-    elevation: 10,
   },
-
-  title: {
-    fontSize: 20,
-    fontWeight: "bold",
-  },
-
-  subtitle: {
-    color: "gray",
-    marginBottom: 15,
-    marginTop: 5,
-  },
-
   button: {
     backgroundColor: "#000",
     padding: 15,
-    borderRadius: 12,
-    alignItems: "center",
+    marginTop: 10,
+    borderRadius: 10,
   },
-
   buttonText: {
-    color: "white",
-    fontWeight: "bold",
+    color: "#fff",
+    textAlign: "center",
   },
-
   searchOverlay: {
     position: "absolute",
     top: 0,
     bottom: 0,
-    left: 0,
-    right: 0,
+    width: "100%",
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: "rgba(255,255,255,0.9)",
   },
-
-  searchText: {
-    marginTop: 10,
-    fontSize: 16,
-    fontWeight: "500",
-    color: "#333",
+  cancelBtn: {
+    marginTop: 15,
+    backgroundColor: "red",
+    padding: 12,
+    borderRadius: 10,
   },
 });
