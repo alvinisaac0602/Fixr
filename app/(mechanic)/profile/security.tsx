@@ -11,24 +11,72 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
+import { StatusBar } from "expo-status-bar";
+
+import { useTheme } from "@/context/ThemeContext";
+import { supabase } from "@/lib/supabase";
 
 const Security = () => {
-  const [isDark, setIsDark] = useState(false);
-  const [biometric, setBiometric] = useState(true);
+  const { theme, toggleTheme } = useTheme();
+  const isDark = theme.darkMode;
 
   const colors = {
-    bg: isDark ? "#0f172a" : "#f6f7fb",
-    card: isDark ? "#1e293b" : "#fff",
-    text: isDark ? "#fff" : "#111",
-    sub: isDark ? "#94a3b8" : "#666",
-    border: isDark ? "#334155" : "#e5e7eb",
-    primary: "#2563eb",
+    bg: theme.colors.background,
+    card: theme.colors.card,
+    text: theme.colors.text,
+    sub: theme.colors.subtitle,
+    border: theme.colors.border || (isDark ? "#334155" : "#e5e7eb"),
+    primary: theme.colors.primary,
     danger: "#ff3b30",
-    green: "#22c55e",
+  };
+
+  // =========================
+  // STATE
+  // =========================
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  // =========================
+  // UPDATE PASSWORD
+  // =========================
+  const handleChangePassword = async () => {
+    if (!newPassword || !confirmPassword) {
+      alert("Please fill all fields");
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      alert("Passwords do not match");
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+
+      if (error) throw error;
+
+      alert("Password updated successfully");
+
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.bg }]}>
+      <StatusBar style={theme.darkMode ? "light" : "dark"} />
+
       <ScrollView contentContainerStyle={styles.scroll}>
 
         {/* HEADER */}
@@ -54,6 +102,8 @@ const Security = () => {
             placeholder="Current password"
             placeholderTextColor={colors.sub}
             secureTextEntry
+            value={currentPassword}
+            onChangeText={setCurrentPassword}
             style={[
               styles.input,
               { borderColor: colors.border, color: colors.text },
@@ -64,6 +114,8 @@ const Security = () => {
             placeholder="New password"
             placeholderTextColor={colors.sub}
             secureTextEntry
+            value={newPassword}
+            onChangeText={setNewPassword}
             style={[
               styles.input,
               { borderColor: colors.border, color: colors.text },
@@ -74,44 +126,37 @@ const Security = () => {
             placeholder="Confirm password"
             placeholderTextColor={colors.sub}
             secureTextEntry
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
             style={[
               styles.input,
               { borderColor: colors.border, color: colors.text },
             ]}
           />
 
-          <Pressable style={[styles.button, { backgroundColor: colors.primary }]}>
-            <Text style={styles.buttonText}>Update Password</Text>
+          <Pressable
+            style={[styles.button, { backgroundColor: colors.primary }]}
+            onPress={handleChangePassword}
+          >
+            <Text style={styles.buttonText}>
+              {loading ? "Updating..." : "Update Password"}
+            </Text>
           </Pressable>
         </View>
 
-        {/* SECURITY OPTIONS */}
+        {/* SETTINGS */}
         <View style={[styles.card, { backgroundColor: colors.card }]}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>
-            Security Options
+            Preferences
           </Text>
 
-          {/* BIOMETRIC */}
-          <View style={styles.row}>
-            <View style={styles.left}>
-              <Ionicons
-                name="finger-print-outline"
-                size={20}
-                color={colors.text}
-              />
-              <Text style={[styles.text, { color: colors.text }]}>
-                Biometric Login
-              </Text>
-            </View>
-
-            <Switch
-              value={biometric}
-              onValueChange={() => setBiometric(!biometric)}
-            />
-          </View>
-
           {/* DARK MODE */}
-          <View style={styles.row}>
+          <View
+            style={[
+              styles.row,
+              { borderColor: colors.border },
+            ]}
+          >
             <View style={styles.left}>
               <Ionicons name="moon-outline" size={20} color={colors.text} />
               <Text style={[styles.text, { color: colors.text }]}>
@@ -120,8 +165,8 @@ const Security = () => {
             </View>
 
             <Switch
-              value={isDark}
-              onValueChange={() => setIsDark(!isDark)}
+              value={theme.darkMode}
+              onValueChange={toggleTheme}
             />
           </View>
         </View>
@@ -132,7 +177,7 @@ const Security = () => {
             Danger Zone
           </Text>
 
-          <Pressable style={[styles.dangerBtn]}>
+          <Pressable style={styles.dangerBtn}>
             <Text style={styles.dangerText}>Delete Account</Text>
           </Pressable>
         </View>
@@ -204,7 +249,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 12,
     borderTopWidth: 1,
-    borderColor: "#eee",
   },
 
   left: {

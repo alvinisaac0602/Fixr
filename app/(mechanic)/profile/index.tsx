@@ -7,11 +7,14 @@ import {
   Switch,
   ScrollView,
 } from "react-native";
-import React from "react";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "@/context/ThemeContext";
+import { useAuth } from "@/context/AuthContext";
+import React, { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
+import { StatusBar } from "expo-status-bar";
 
 type MenuItemProps = {
   icon: any;
@@ -22,10 +25,41 @@ type MenuItemProps = {
 
 export default function Profile() {
   const { theme, toggleTheme } = useTheme();
+  const { user } = useAuth();
   const colors = theme.colors;
+  const [profile, setProfile] = useState<any>(null);
+
+  const getInitials = (email: string) => {
+    if (!email) return "M";
+    const namePart = email.split("@")[0];
+    const parts = namePart.split(/[._-]/);
+
+    if (parts.length === 1) {
+      return parts[0].slice(0, 2).toUpperCase();
+    }
+
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  };
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      if (!user?.id) return;
+
+      const { data } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", user.id)
+        .single();
+
+      if (data) setProfile(data);
+    };
+
+    fetchProfile();
+  }, [user]);
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+       <StatusBar style={theme.darkMode ? "light" : "dark"} />
       <ScrollView showsVerticalScrollIndicator={false}>
 
         {/* HEADER */}
@@ -43,13 +77,31 @@ export default function Profile() {
 
         {/* PROFILE CARD */}
         <View style={[styles.profileCard, { backgroundColor: colors.card }]}>
-          <Image
-            source={{ uri: "https://i.pravatar.cc/150?img=12" }}
-            style={styles.avatar}
-          />
+
+          {profile?.avatar_url ? (
+            <Image
+              source={{ uri: profile.avatar_url }}
+              style={styles.avatar}
+            />
+          ) : (
+            <View
+              style={[
+                styles.avatar,
+                {
+                  backgroundColor: "#555",
+                  justifyContent: "center",
+                  alignItems: "center",
+                },
+              ]}
+            >
+              <Text style={{ color: "#fff", fontSize: 24, fontWeight: "700" }}>
+                {getInitials(user?.email || "")}
+              </Text>
+            </View>
+          )}
 
           <Text style={[styles.name, { color: colors.text }]}>
-            John Mechanic
+            {profile?.full_name || user?.email || "Mechanic"}
           </Text>
 
           <Text style={{ color: colors.subtitle }}>
@@ -59,7 +111,6 @@ export default function Profile() {
 
         {/* MENU */}
         <View style={[styles.menuCard, { backgroundColor: colors.card }]}>
-
           <MenuItem
             icon="person-outline"
             label="Edit Profile"
@@ -105,13 +156,18 @@ export default function Profile() {
         </View>
 
         {/* SWITCH TO USER */}
-<Pressable
-  style={[styles.switchRole, { backgroundColor: colors.primary }]}
-  onPress={() => router.replace("/(user)/home")}
->
-  <Ionicons name="swap-horizontal-outline" size={20} color="#fff" />
-  <Text style={styles.switchText}>Switch to User Mode</Text>
-</Pressable>
+        <Pressable
+          style={[
+            styles.switchRole,
+            {
+              backgroundColor: theme.darkMode ? "#222" : "#111",
+            },
+          ]}
+          onPress={() => router.replace("/(user)/home")}
+        >
+          <Ionicons name="swap-horizontal-outline" size={20} color="#fff" />
+          <Text style={styles.switchText}>Switch to User Mode</Text>
+        </Pressable>
 
         {/* LOGOUT */}
         <Pressable
@@ -145,9 +201,7 @@ function MenuItem({ icon, label, onPress, colors }: MenuItemProps) {
 
 /* STYLES */
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  container: { flex: 1 },
 
   header: {
     flexDirection: "row",
@@ -156,9 +210,7 @@ const styles = StyleSheet.create({
     padding: 20,
   },
 
-  iconBtn: {
-    padding: 5,
-  },
+  iconBtn: { padding: 5 },
 
   title: {
     fontSize: 20,
@@ -192,14 +244,12 @@ const styles = StyleSheet.create({
   },
 
   item: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    padding: 15,
-    borderBottomWidth: 1,
-    borderColor: "#eee",
-  },
-
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "space-between",
+  padding: 15,
+},
+  
   leftRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -227,20 +277,20 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "700",
   },
+
   switchRole: {
-  marginHorizontal: 20,
-  marginTop: 10,
-  flexDirection: "row",
-  justifyContent: "center",
-  alignItems: "center",
-  padding: 15,
-  borderRadius: 12,
-  gap: 10,
-},
+    marginHorizontal: 20,
+    marginTop: 10,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 15,
+    borderRadius: 12,
+    gap: 10,
+  },
 
-switchText: {
-  color: "#fff",
-  fontWeight: "700",
-},
+  switchText: {
+    color: "#fff",
+    fontWeight: "700",
+  },
 });
-

@@ -180,9 +180,16 @@ export default function EditProfile() {
 
         {/* SWITCH ROLE */}
         <Pressable
-          style={[styles.switchRole, { backgroundColor: theme.colors.primary }]}
-          onPress={() => router.replace("/(mechanic)/dashboard")}
-        >
+  style={[
+    styles.switchRole,
+    {
+      backgroundColor: theme.darkMode
+        ? theme.colors.primary
+        : "#111", // strong dark color for light mode
+    },
+  ]}
+  onPress={() => router.replace("/(mechanic)/dashboard")}
+>
           <Ionicons name="construct-outline" size={20} color="#fff" />
           <Text style={styles.switchText}>Switch to Mechanic Mode</Text>
         </Pressable>

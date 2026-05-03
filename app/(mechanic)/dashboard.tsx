@@ -26,7 +26,7 @@ const Dashboard = () => {
   const [selectedRequest, setSelectedRequest] = useState<any>(null);
   const [routeInfo, setRouteInfo] = useState<any>(null);
 
-  // 👤 NEW: customer profile
+  // 👤 customer profile
   const [customerProfile, setCustomerProfile] = useState<any>(null);
 
   // 🔐 Auth check
@@ -82,11 +82,11 @@ const Dashboard = () => {
     };
   }, []);
 
-  // 👤 FETCH CUSTOMER (NEW)
+  // 👤 FETCH CUSTOMER (FIXED)
   const fetchCustomer = async (userId: string) => {
     const { data } = await supabase
       .from("profiles")
-      .select("name, phone")
+      .select("full_name, phone") // ✅ FIXED
       .eq("id", userId)
       .single();
 
@@ -117,7 +117,7 @@ const Dashboard = () => {
     }
   };
 
-  // ❌ CANCEL JOB (NEW)
+  // ❌ CANCEL JOB
   const cancelAcceptedRequest = async () => {
     if (!selectedRequest) return;
 
@@ -244,14 +244,18 @@ const Dashboard = () => {
           </View>
         )}
 
-        {/* 👤 CUSTOMER DETAILS (NEW FEATURE) */}
+        {/* 👤 CUSTOMER DETAILS (FIXED DISPLAY) */}
         {selectedRequest && customerProfile && (
           <View style={styles.routeCard}>
             <Text style={{ fontWeight: "bold" }}>
               👤 Customer Details
             </Text>
-            <Text>Name: {customerProfile.name}</Text>
-            <Text>Phone: {customerProfile.phone}</Text>
+            <Text>
+              Name: {customerProfile?.full_name || "No name"}
+            </Text>
+            <Text>
+              Phone: {customerProfile?.phone || "No phone"}
+            </Text>
 
             <Pressable
               onPress={cancelAcceptedRequest}
