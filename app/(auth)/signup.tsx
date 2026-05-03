@@ -21,12 +21,12 @@ const Signup = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [username, setUsername] = useState("");
+  const [phone, setPhone] = useState(""); // ✅ NEW
   const [loading, setLoading] = useState(false);
-
   const [showPassword, setShowPassword] = useState(false);
 
   const handleSignup = async () => {
-    if (!email || !password || !username) {
+    if (!email || !password || !username || !phone) {
       alert("All fields are required");
       return;
     }
@@ -47,11 +47,14 @@ const Signup = () => {
       const user = data.user;
 
       if (user) {
-        await supabase.from("profiles").insert({
+        // ✅ UPSERT PROFILE (prevents duplicate issues)
+        await supabase.from("profiles").upsert({
           id: user.id,
           email: user.email,
           username,
+          phone, // ✅ IMPORTANT
           role: "user",
+          updated_at: new Date(),
         });
       }
 
@@ -73,10 +76,8 @@ const Signup = () => {
           style={{ flex: 1 }}
           behavior={Platform.OS === "ios" ? "padding" : "height"}
         >
-          <ScrollView
-            contentContainerStyle={styles.scroll}
-            keyboardShouldPersistTaps="handled"
-          >
+          <ScrollView contentContainerStyle={styles.scroll}>
+            
             {/* HEADER */}
             <View style={styles.header}>
               <Text style={styles.logo}>Fixr</Text>
@@ -96,6 +97,16 @@ const Signup = () => {
                 style={styles.input}
               />
 
+              {/* NEW PHONE FIELD */}
+              <TextInput
+                placeholder="Phone number"
+                placeholderTextColor="#A5B4FC"
+                value={phone}
+                onChangeText={setPhone}
+                keyboardType="phone-pad"
+                style={styles.input}
+              />
+
               <TextInput
                 placeholder="Email"
                 placeholderTextColor="#A5B4FC"
@@ -106,7 +117,7 @@ const Signup = () => {
                 autoCapitalize="none"
               />
 
-              {/* PASSWORD FIELD WITH EYE */}
+              {/* PASSWORD */}
               <View style={styles.passwordContainer}>
                 <TextInput
                   placeholder="Password"
@@ -145,6 +156,7 @@ const Signup = () => {
                 </Text>
               </Pressable>
             </View>
+
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>

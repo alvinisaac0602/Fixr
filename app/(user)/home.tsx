@@ -30,11 +30,8 @@ const Home = () => {
   const [searching, setSearching] = useState(false);
 
   const [request, setRequest] = useState<Request | null>(null);
-  const [mechanic, setMechanic] = useState<any>(null);
   const [mechanicLocation, setMechanicLocation] = useState<any>(null);
   const [routeInfo, setRouteInfo] = useState<any>(null);
-
-  // 👤 NEW: mechanic profile display
   const [mechanicProfile, setMechanicProfile] = useState<any>(null);
 
   // 📍 LOCATION
@@ -91,7 +88,6 @@ const Home = () => {
 
       setRequest(data);
 
-      // realtime listener
       const channel = supabase
         .channel("request-" + data.id)
         .on(
@@ -102,18 +98,25 @@ const Home = () => {
             table: "requests",
             filter: `id=eq.${data.id}`,
           },
-          (payload) => {
+          async (payload) => {
             const updated = payload.new as Request;
 
             setRequest(updated);
 
-            // ✅ ACCEPTED
             if (updated?.status === "accepted") {
               setSearching(false);
-              fetchMechanic(updated.mechanic_id!);
+
+              const { data: freshRequest } = await supabase
+                .from("requests")
+                .select("*")
+                .eq("id", updated.id)
+                .single();
+
+              if (freshRequest?.mechanic_id) {
+                fetchMechanic(freshRequest.mechanic_id);
+              }
             }
 
-            // ❌ CANCELLED
             if (updated?.status === "cancelled") {
               setSearching(false);
               resetState();
@@ -128,11 +131,11 @@ const Home = () => {
     }
   };
 
-  // 👤 FETCH MECHANIC DETAILS (NEW FIX)
+  // 👤 FETCH MECHANIC
   const fetchMechanic = async (mechanicId: string) => {
     const { data } = await supabase
       .from("profiles")
-      .select("name, phone")
+      .select("full_name, phone")
       .eq("id", mechanicId)
       .single();
 
@@ -147,7 +150,7 @@ const Home = () => {
     setMechanicLocation(loc);
   };
 
-  // ❌ CANCEL REQUEST (USER SIDE)
+  // ❌ CANCEL
   const cancelRequest = async () => {
     if (!request) return;
 
@@ -162,7 +165,6 @@ const Home = () => {
   const resetState = () => {
     setSearching(false);
     setRequest(null);
-    setMechanic(null);
     setMechanicLocation(null);
     setMechanicProfile(null);
     setRouteInfo(null);
@@ -188,12 +190,49 @@ const Home = () => {
           latitudeDelta: 0.01,
           longitudeDelta: 0.01,
         }}
-        showsUserLocation={false}
+        showsUserLocation
       >
+        {/* USER */}
         <Marker coordinate={location} title="You" />
+
+        {/* MECHANIC */}
+        {mechanicLocation && (
+          <Marker
+            coordinate={{
+              latitude: mechanicLocation.latitude,
+              longitude: mechanicLocation.longitude,
+            }}
+            title="Mechanic"
+            pinColor="blue"
+          />
+        )}
+
+        {/* ROUTE */}
+        {mechanicLocation && (
+          <MapViewDirections
+            origin={location}
+            destination={mechanicLocation}
+            apikey={process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || ""}
+            strokeWidth={4}
+            strokeColor="green"
+            onReady={(result) => {
+              setRouteInfo(result);
+
+              mapRef.current?.fitToCoordinates(result.coordinates, {
+                edgePadding: {
+                  top: 100,
+                  right: 50,
+                  bottom: 250,
+                  left: 50,
+                },
+                animated: true,
+              });
+            }}
+          />
+        )}
       </MapView>
 
-      {/* SEARCHING STATE */}
+      {/* SEARCHING */}
       {searching && (
         <View style={styles.searchOverlay}>
           <ActivityIndicator size="large" />
@@ -205,37 +244,38 @@ const Home = () => {
         </View>
       )}
 
-      {/* 🚨 ACCEPTED STATE (NEW UI) */}
+      {/* ACCEPTED UI */}
       {request?.status === "accepted" && mechanicProfile && (
-        <View style={styles.searchOverlay}>
-          <Text style={{ fontSize: 18, fontWeight: "bold" }}>
-            Mechanic Assigned 🚗
+        <View style={styles.bottomCard}>
+          <Text style={{ fontWeight: "bold", fontSize: 16 }}>
+            🚗 Mechanic Assigned
           </Text>
 
-          <Text>Name: {mechanicProfile.name}</Text>
+          <Text>Name: {mechanicProfile.full_name}</Text>
           <Text>Phone: {mechanicProfile.phone}</Text>
 
-          <Pressable
-            style={styles.cancelBtn}
-            onPress={cancelRequest}
-          >
-            <Text style={{ color: "#fff" }}>Cancel Request</Text>
+          {routeInfo && (
+            <View style={styles.routeCard}>
+              <Text>📏 {routeInfo.distance.toFixed(2)} km away</Text>
+              <Text>⏱️ {Math.ceil(routeInfo.duration)} mins</Text>
+            </View>
+          )}
+
+          <Pressable style={styles.cancelBtn} onPress={cancelRequest}>
+            <Text style={{ color: "#fff", textAlign: "center" }}>
+              Cancel Request
+            </Text>
           </Pressable>
         </View>
       )}
 
-      {/* DEFAULT UI */}
+      {/* DEFAULT */}
       {!searching && !request && (
         <View style={styles.bottomCard}>
           <Text>Need a Mechanic?</Text>
 
-          <Pressable
-            onPress={requestMechanic}
-            style={styles.button}
-          >
-            <Text style={styles.buttonText}>
-              Request Mechanic
-            </Text>
+          <Pressable onPress={requestMechanic} style={styles.button}>
+            <Text style={styles.buttonText}>Request Mechanic</Text>
           </Pressable>
         </View>
       )}
@@ -247,7 +287,13 @@ export default Home;
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  loader: { flex: 1, justifyContent: "center", alignItems: "center" },
+
+  loader: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
   bottomCard: {
     position: "absolute",
     bottom: 0,
@@ -255,16 +301,19 @@ const styles = StyleSheet.create({
     backgroundColor: "white",
     padding: 20,
   },
+
   button: {
     backgroundColor: "#000",
     padding: 15,
     marginTop: 10,
     borderRadius: 10,
   },
+
   buttonText: {
     color: "#fff",
     textAlign: "center",
   },
+
   searchOverlay: {
     position: "absolute",
     top: 0,
@@ -274,10 +323,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "rgba(255,255,255,0.9)",
   },
+
   cancelBtn: {
     marginTop: 15,
     backgroundColor: "red",
     padding: 12,
+    borderRadius: 10,
+  },
+
+  routeCard: {
+    marginTop: 10,
+    backgroundColor: "#f5f5f5",
+    padding: 10,
     borderRadius: 10,
   },
 });

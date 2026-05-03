@@ -4,43 +4,93 @@ import {
   View,
   ScrollView,
   Pressable,
+  ActivityIndicator,
 } from "react-native";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "@/context/ThemeContext";
+import { useAuth } from "@/context/AuthContext";
+import { supabase } from "@/lib/supabase";
 
 const Activity = () => {
   const { theme } = useTheme();
+  const { user } = useAuth();
 
-  const activeJob = {
-    mechanic: "John Mechanic",
-    issue: "Engine overheating",
-    location: "Ntinda, Kampala",
-    status: "On the way",
-  };
+  const [loading, setLoading] = useState(true);
+  const [activeJob, setActiveJob] = useState<any>(null);
+  const [history, setHistory] = useState<any[]>([]);
 
-  const history = [
-    {
-      id: 1,
-      mechanic: "Peter Auto",
-      issue: "Battery replacement",
-      location: "Kololo",
-      price: "UGX 80,000",
-      status: "Completed",
-      date: "Today",
-    },
-    {
-      id: 2,
-      mechanic: "David Garage",
-      issue: "Brake repair",
-      location: "Nakawa",
-      price: "UGX 50,000",
-      status: "Cancelled",
-      date: "Yesterday",
-    },
-  ];
+  // 🔥 FETCH DATA FROM SUPABASE
+  useEffect(() => {
+    const fetchActivity = async () => {
+      if (!user) return;
+
+      setLoading(true);
+
+      // ACTIVE JOB
+      const { data: active } = await supabase
+        .from("requests")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("status", "accepted")
+        .maybeSingle();
+
+      // HISTORY
+      const { data: past } = await supabase
+        .from("requests")
+        .select("*")
+        .eq("user_id", user.id)
+        .in("status", ["completed", "cancelled"])
+        .order("created_at", { ascending: false });
+
+      // 🔥 ENRICH DATA WITH PROFILES
+      if (active?.mechanic_id) {
+        const { data: mech } = await supabase
+          .from("profiles")
+          .select("full_name, phone")
+          .eq("id", active.mechanic_id)
+          .single();
+
+        active.mechanic_name = mech?.full_name;
+      }
+
+      const enrichedHistory = await Promise.all(
+        (past || []).map(async (item) => {
+          if (item.mechanic_id) {
+            const { data: mech } = await supabase
+              .from("profiles")
+              .select("full_name")
+              .eq("id", item.mechanic_id)
+              .single();
+
+            return {
+              ...item,
+              mechanic_name: mech?.full_name,
+            };
+          }
+          return item;
+        })
+      );
+
+      setActiveJob(active);
+      setHistory(enrichedHistory);
+
+      setLoading(false);
+    };
+
+    fetchActivity();
+  }, [user]);
+
+  if (loading) {
+    return (
+      <View style={styles.loader}>
+        <ActivityIndicator size="large" />
+        <Text>Loading activity...</Text>
+      </View>
+    );
+  }
 
   return (
     <SafeAreaView
@@ -50,13 +100,13 @@ const Activity = () => {
       <StatusBar style={theme.darkMode ? "light" : "dark"} />
 
       <ScrollView contentContainerStyle={styles.container}>
-        {/* Title */}
+        {/* TITLE */}
         <Text style={[styles.title, { color: theme.colors.text }]}>
           Activity
         </Text>
 
-        {/* Active Job */}
-        {activeJob && (
+        {/* ACTIVE JOB */}
+        {activeJob ? (
           <View
             style={[
               styles.activeCard,
@@ -68,25 +118,31 @@ const Activity = () => {
             </Text>
 
             <Text style={[styles.bold, { color: theme.colors.text }]}>
-              {activeJob.mechanic}
+              {activeJob.mechanic_name || "Mechanic"}
             </Text>
 
             <Text style={{ color: theme.colors.text }}>
-              {activeJob.issue}
+              Request in progress
             </Text>
 
             <Text style={[styles.gray, { color: theme.colors.subtitle }]}>
-              {activeJob.location}
+              {activeJob.latitude}, {activeJob.longitude}
             </Text>
 
             <View style={styles.statusRow}>
               <Ionicons name="time-outline" size={16} color="#ff9500" />
-              <Text style={styles.activeStatus}>{activeJob.status}</Text>
+              <Text style={styles.activeStatus}>
+                {activeJob.status}
+              </Text>
             </View>
           </View>
+        ) : (
+          <Text style={{ color: theme.colors.subtitle }}>
+            No active job
+          </Text>
         )}
 
-        {/* History */}
+        {/* HISTORY */}
         <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
           History
         </Text>
@@ -94,18 +150,9 @@ const Activity = () => {
         {history.length === 0 ? (
           <View style={styles.empty}>
             <Ionicons name="receipt-outline" size={50} color={theme.colors.subtitle} />
-
             <Text style={[styles.emptyText, { color: theme.colors.text }]}>
               No activity yet
             </Text>
-
-            <Text style={[styles.emptySub, { color: theme.colors.subtitle }]}>
-              You haven’t requested a mechanic yet
-            </Text>
-
-            <Pressable style={styles.cta}>
-              <Text style={styles.ctaText}>Request Mechanic</Text>
-            </Pressable>
           </View>
         ) : (
           history.map((item) => (
@@ -118,27 +165,23 @@ const Activity = () => {
             >
               <View>
                 <Text style={[styles.bold, { color: theme.colors.text }]}>
-                  {item.mechanic}
+                  {item.mechanic_name || "Mechanic"}
                 </Text>
 
                 <Text style={{ color: theme.colors.text }}>
-                  {item.issue}
+                  Service request
                 </Text>
 
                 <Text style={[styles.gray, { color: theme.colors.subtitle }]}>
-                  {item.location}
+                  {new Date(item.created_at).toDateString()}
                 </Text>
               </View>
 
               <View style={styles.right}>
-                <Text style={[styles.price, { color: theme.colors.text }]}>
-                  {item.price}
-                </Text>
-
                 <Text
                   style={[
                     styles.status,
-                    item.status === "Completed"
+                    item.status === "completed"
                       ? styles.completed
                       : styles.cancelled,
                   ]}
@@ -208,6 +251,11 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     marginBottom: 10,
   },
+  loader: {
+  flex: 1,
+  justifyContent: "center",
+  alignItems: "center",
+},
 
   bold: {
     fontWeight: "bold",

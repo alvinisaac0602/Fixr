@@ -1,32 +1,72 @@
-import { StyleSheet, Text, View, Pressable, ScrollView } from "react-native";
-import React from "react";
+import React, { useEffect, useState } from "react";
+import { StyleSheet, Text, View, Pressable, ScrollView, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useTheme } from "@/context/ThemeContext";
+import { useAuth } from "@/context/AuthContext";
+import { supabase } from "@/lib/supabase";
 
 export default function Notifications() {
   const { theme } = useTheme();
+  const { user } = useAuth();
   const colors = theme.colors;
 
-  const notifications = [
-    {
-      id: 1,
-      title: "Mechanic Accepted Request",
-      desc: "John is on the way to your location.",
-      time: "2 min ago",
-    },
-    {
-      id: 2,
-      title: "Service Completed",
-      desc: "Your car repair is complete.",
-      time: "Yesterday",
-    },
-  ];
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // 📡 FETCH
+  const fetchNotifications = async () => {
+    if (!user) return;
+
+    setLoading(true);
+
+    const { data, error } = await supabase
+      .from("notifications")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false });
+
+    if (!error) {
+      setNotifications(data || []);
+    }
+
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    fetchNotifications();
+  }, [user]);
+
+  // 🔴 REALTIME
+  useEffect(() => {
+    if (!user) return;
+
+    const channel = supabase
+      .channel("notifications-realtime")
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "notifications",
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          setNotifications((prev) => [payload.new, ...prev]);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user]);
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      
+    <SafeAreaView
+      style={[styles.container, { backgroundColor: colors.background }]}
+    >
       {/* HEADER */}
       <View style={styles.header}>
         <Pressable onPress={() => router.back()}>
@@ -40,37 +80,52 @@ export default function Notifications() {
         <View style={{ width: 24 }} />
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
-        
-        {notifications.map((item) => (
-          <View
-            key={item.id}
-            style={[styles.card, { backgroundColor: colors.card }]}
-          >
-            <Text style={[styles.cardTitle, { color: colors.text }]}>
-              {item.title}
-            </Text>
+      {/* LOADING */}
+      {loading && (
+        <View style={styles.loader}>
+          <ActivityIndicator size="large" />
+        </View>
+      )}
 
-            <Text style={[styles.desc, { color: colors.subtitle }]}>
-              {item.desc}
-            </Text>
+      {/* LIST */}
+      {!loading && (
+        <ScrollView showsVerticalScrollIndicator={false}>
+          {notifications.map((item) => (
+            <View
+              key={item.id}
+              style={[styles.card, { backgroundColor: colors.card }]}
+            >
+              <Text style={[styles.cardTitle, { color: colors.text }]}>
+                {item.title || "Notification"}
+              </Text>
 
-            <Text style={[styles.time, { color: colors.subtitle }]}>
-              {item.time}
-            </Text>
-          </View>
-        ))}
+              <Text style={[styles.desc, { color: colors.subtitle }]}>
+                {item.description || ""}
+              </Text>
 
-        {notifications.length === 0 && (
-          <View style={styles.empty}>
-            <Ionicons name="notifications-off-outline" size={50} color={colors.subtitle} />
-            <Text style={[styles.emptyText, { color: colors.text }]}>
-              No notifications
-            </Text>
-          </View>
-        )}
+              <Text style={[styles.time, { color: colors.subtitle }]}>
+                {item.created_at
+                  ? new Date(item.created_at).toLocaleString()
+                  : ""}
+              </Text>
+            </View>
+          ))}
 
-      </ScrollView>
+          {/* EMPTY */}
+          {notifications.length === 0 && (
+            <View style={styles.empty}>
+              <Ionicons
+                name="notifications-off-outline"
+                size={50}
+                color={colors.subtitle}
+              />
+              <Text style={[styles.emptyText, { color: colors.text }]}>
+                No notifications
+              </Text>
+            </View>
+          )}
+        </ScrollView>
+      )}
     </SafeAreaView>
   );
 }
@@ -124,5 +179,10 @@ const styles = StyleSheet.create({
     marginTop: 10,
     fontSize: 16,
     fontWeight: "600",
+  },
+
+  loader: {
+    marginTop: 50,
+    alignItems: "center",
   },
 });

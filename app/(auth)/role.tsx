@@ -1,6 +1,7 @@
 import { View, Text, Pressable, StyleSheet, Animated } from "react-native";
 import React, { useRef } from "react";
 import { router } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export default function Role() {
   const scaleUser = useRef(new Animated.Value(1)).current;
@@ -21,9 +22,13 @@ export default function Role() {
     ]).start();
   };
 
-  const selectRole = (role: "user" | "mechanic") => {
+  const selectRole = async (role: "user" | "mechanic") => {
     console.log("Selected role:", role);
 
+    // OPTIONAL: store last selected role (for smoother UX)
+    await AsyncStorage.setItem("last_role", role);
+
+    // ROUTE BASED ON ROLE
     if (role === "user") {
       router.replace("/(user)/home");
     } else {
