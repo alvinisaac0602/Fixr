@@ -35,14 +35,19 @@ const Home = () => {
   const [mechanicProfile, setMechanicProfile] = useState<any>(null);
 
   // 📍 LOCATION
-  useEffect(() => {
-    let subscription: any;
+ useEffect(() => {
+  let subscription: any;
 
-    (async () => {
+  (async () => {
+    try {
       const { status } =
         await Location.requestForegroundPermissionsAsync();
 
-      if (status !== "granted") return;
+      if (status !== "granted") {
+        console.log("Permission denied");
+        setLoading(false);
+        return;
+      }
 
       const loc = await Location.getCurrentPositionAsync({});
       setLocation(loc.coords);
@@ -58,10 +63,14 @@ const Home = () => {
           setLocation(locUpdate.coords);
         }
       );
-    })();
+    } catch (error) {
+      console.log("Location error:", error);
+      setLoading(false);
+    }
+  })();
 
-    return () => subscription?.remove();
-  }, []);
+  return () => subscription?.remove();
+}, []);
 
   // 🔧 REQUEST MECHANIC
   const requestMechanic = async () => {
@@ -251,7 +260,7 @@ const Home = () => {
             🚗 Mechanic Assigned
           </Text>
 
-          <Text>Name: {mechanicProfile.full_name}</Text>
+          <Text>Name: {mechanicProfile.username}</Text>
           <Text>Phone: {mechanicProfile.phone}</Text>
 
           {routeInfo && (

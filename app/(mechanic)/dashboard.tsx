@@ -37,18 +37,34 @@ const Dashboard = () => {
   }, [user, authLoading]);
 
   // 📍 Get mechanic location
-  useEffect(() => {
-    (async () => {
+// 📍 Get mechanic location
+useEffect(() => {
+  (async () => {
+    try {
       const { status } =
         await Location.requestForegroundPermissionsAsync();
 
-      if (status !== "granted") return;
+      if (status !== "granted") {
+        console.log("Permission denied");
+        setLoading(false);
+        return;
+      }
 
-      const loc = await Location.getCurrentPositionAsync({});
-      setLocation(loc.coords);
+      const loc = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+      });
+
+      if (loc?.coords) {
+        setLocation(loc.coords);
+      }
+
       setLoading(false);
-    })();
-  }, []);
+    } catch (error) {
+      console.log("Location error:", error);
+      setLoading(false);
+    }
+  })();
+}, []);
 
   // 📡 Fetch requests
   useEffect(() => {
@@ -251,7 +267,7 @@ const Dashboard = () => {
               👤 Customer Details
             </Text>
             <Text>
-              Name: {customerProfile?.full_name || "No name"}
+              Name: {customerProfile?.username || "No name"}
             </Text>
             <Text>
               Phone: {customerProfile?.phone || "No phone"}

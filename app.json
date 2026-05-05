@@ -8,24 +8,34 @@
     "scheme": "fixr",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+
     "ios": {
       "supportsTablet": true
     },
+
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png"
       },
+      "splash": {
+        "backgroundColor": "#FFFFFF",
+        "image": "./assets/images/splash-icon.png",
+        "resizeMode": "contain"
+      },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "package": "com.kiizaisaac.fixr"
     },
+
     "web": {
       "output": "static",
       "favicon": "./assets/images/favicon.png"
     },
+
     "plugins": [
       "expo-router",
+      "expo-location",
       [
         "expo-splash-screen",
         {
@@ -39,14 +49,16 @@
         }
       ]
     ],
+
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
     },
+
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "77984669-6cef-4807-b095-4a57a4afb035"
+        "projectId": "8531c91a-56e3-4be8-8f34-e99942770cd0"
       }
     }
   }
