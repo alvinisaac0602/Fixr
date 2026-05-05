@@ -14,19 +14,23 @@
     },
 
     "android": {
-      "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png"
-      },
-      "splash": {
-        "backgroundColor": "#FFFFFF",
-        "image": "./assets/images/splash-icon.png",
-        "resizeMode": "contain"
-      },
-      "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false,
-      "package": "com.kiizaisaac.fixr"
-    },
+  "adaptiveIcon": {
+    "backgroundColor": "#E6F4FE",
+    "foregroundImage": "./assets/images/android-icon-foreground.png"
+  },
+  "splash": {
+    "backgroundColor": "#FFFFFF",
+    "image": "./assets/images/splash-icon.png",
+    "resizeMode": "contain"
+  },
+  "edgeToEdgeEnabled": true,
+  "predictiveBackGestureEnabled": false,
+  "package": "com.kiizaisaac.fixr",
+  "permissions": [
+    "ACCESS_FINE_LOCATION",
+    "ACCESS_COARSE_LOCATION"
+  ]
+},
 
     "web": {
       "output": "static",
