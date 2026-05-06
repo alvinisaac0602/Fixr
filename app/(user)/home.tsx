@@ -11,6 +11,7 @@ import MapViewDirections from "react-native-maps-directions";
 import * as Location from "expo-location";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabase";
+import { Ionicons } from "@expo/vector-icons";
 
 type Request = {
   id: string;
@@ -34,43 +35,62 @@ const Home = () => {
   const [routeInfo, setRouteInfo] = useState<any>(null);
   const [mechanicProfile, setMechanicProfile] = useState<any>(null);
 
-  // 📍 LOCATION
- useEffect(() => {
-  let subscription: any;
+  // 📍 LOCATION (OPTIMIZED: instant load)
+  useEffect(() => {
+    let subscription: Location.LocationSubscription | null = null;
+    let isMounted = true;
 
-  (async () => {
-    try {
-      const { status } =
-        await Location.requestForegroundPermissionsAsync();
+    (async () => {
+      try {
+        const { status } =
+          await Location.requestForegroundPermissionsAsync();
 
-      if (status !== "granted") {
-        console.log("Permission denied");
-        setLoading(false);
-        return;
-      }
-
-      const loc = await Location.getCurrentPositionAsync({});
-      setLocation(loc.coords);
-      setLoading(false);
-
-      subscription = await Location.watchPositionAsync(
-        {
-          accuracy: Location.Accuracy.High,
-          timeInterval: 5000,
-          distanceInterval: 10,
-        },
-        (locUpdate) => {
-          setLocation(locUpdate.coords);
+        if (status !== "granted") {
+          setLoading(false);
+          return;
         }
-      );
-    } catch (error) {
-      console.log("Location error:", error);
-      setLoading(false);
-    }
-  })();
 
-  return () => subscription?.remove();
-}, []);
+        // 1. Get last known location for instant map load
+        const lastLoc = await Location.getLastKnownPositionAsync({});
+        if (isMounted && lastLoc?.coords) {
+          setLocation(lastLoc.coords);
+          setLoading(false); // Map can show now
+        }
+
+        // 2. Get precise location in background
+        const loc = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+
+        if (isMounted && loc?.coords) {
+          setLocation(loc.coords);
+        }
+
+        setLoading(false);
+
+        subscription = await Location.watchPositionAsync(
+          {
+            accuracy: Location.Accuracy.Balanced,
+            timeInterval: 10000,
+            distanceInterval: 20,
+          },
+          (locUpdate) => {
+            if (isMounted && locUpdate?.coords) {
+              setLocation(locUpdate.coords);
+            }
+          }
+        );
+      } catch (error) {
+        console.log("Location error:", error);
+        setLoading(false);
+      }
+    })();
+
+    return () => {
+      isMounted = false;
+      subscription?.remove();
+    };
+  }, []);
 
   // 🔧 REQUEST MECHANIC
   const requestMechanic = async () => {
@@ -179,7 +199,8 @@ const Home = () => {
     setRouteInfo(null);
   };
 
-  if (loading || !location) {
+  // 🔒 SAFE LOADING (FIXED: prevents crash loop)
+  if (loading || !location?.latitude || !location?.longitude) {
     return (
       <View style={styles.loader}>
         <ActivityIndicator size="large" />
@@ -200,46 +221,84 @@ const Home = () => {
           longitudeDelta: 0.01,
         }}
         showsUserLocation
+        showsMyLocationButton={true}
+        showsCompass={true}
+        showsScale={true}
+        loadingEnabled={true}
+        mapPadding={{ top: 50, right: 10, bottom: 200, left: 10 }}
       >
         {/* USER */}
-        <Marker coordinate={location} title="You" />
+        <Marker coordinate={location} title="You">
+           <View style={styles.markerContainer}>
+              <View style={styles.markerDot} />
+           </View>
+        </Marker>
 
         {/* MECHANIC */}
-        {mechanicLocation && (
+        {mechanicLocation?.latitude && mechanicLocation?.longitude && (
           <Marker
             coordinate={{
               latitude: mechanicLocation.latitude,
               longitude: mechanicLocation.longitude,
             }}
             title="Mechanic"
-            pinColor="blue"
-          />
+          >
+             <View style={[styles.markerContainer, { backgroundColor: "#2563eb" }]}>
+                <Text style={{ fontSize: 18 }}>🔧</Text>
+             </View>
+          </Marker>
         )}
 
-        {/* ROUTE */}
-        {mechanicLocation && (
-          <MapViewDirections
-            origin={location}
-            destination={mechanicLocation}
-            apikey={process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || ""}
-            strokeWidth={4}
-            strokeColor="green"
-            onReady={(result) => {
-              setRouteInfo(result);
+        {/* ROUTE (FIXED: prevents invalid render crash) */}
+        {mechanicLocation?.latitude &&
+          mechanicLocation?.longitude &&
+          location?.latitude &&
+          location?.longitude && (
+            <MapViewDirections
+              origin={location}
+              destination={{
+                latitude: mechanicLocation.latitude,
+                longitude: mechanicLocation.longitude,
+              }}
+              apikey={process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY ?? ""}
+              strokeWidth={5}
+              strokeColor="#4C1D95"
+              lineDashPattern={[0]}
+              onReady={(result) => {
+                if (!routeInfo) {
+                  setRouteInfo(result);
 
-              mapRef.current?.fitToCoordinates(result.coordinates, {
-                edgePadding: {
-                  top: 100,
-                  right: 50,
-                  bottom: 250,
-                  left: 50,
-                },
-                animated: true,
-              });
-            }}
-          />
-        )}
+                  mapRef.current?.fitToCoordinates(result.coordinates, {
+                    edgePadding: {
+                      top: 100,
+                      right: 60,
+                      bottom: 300,
+                      left: 60,
+                    },
+                    animated: true,
+                  });
+                }
+              }}
+            />
+          )}
       </MapView>
+
+      {/* FLOATING ACTION BUTTONS */}
+      <View style={styles.fabContainer}>
+        <Pressable
+          style={styles.fab}
+          onPress={() => {
+            mapRef.current?.animateToRegion({
+              latitude: location.latitude,
+              longitude: location.longitude,
+              latitudeDelta: 0.01,
+              longitudeDelta: 0.01,
+            });
+          }}
+        >
+          <Ionicons name="locate" size={24} color="#4C1D95" />
+        </Pressable>
+      </View>
 
       {/* SEARCHING */}
       {searching && (
@@ -253,14 +312,14 @@ const Home = () => {
         </View>
       )}
 
-      {/* ACCEPTED UI */}
+      {/* ACCEPTED */}
       {request?.status === "accepted" && mechanicProfile && (
         <View style={styles.bottomCard}>
           <Text style={{ fontWeight: "bold", fontSize: 16 }}>
             🚗 Mechanic Assigned
           </Text>
 
-          <Text>Name: {mechanicProfile.username}</Text>
+          <Text>Name: {mechanicProfile.full_name}</Text>
           <Text>Phone: {mechanicProfile.phone}</Text>
 
           {routeInfo && (
@@ -345,5 +404,43 @@ const styles = StyleSheet.create({
     backgroundColor: "#f5f5f5",
     padding: 10,
     borderRadius: 10,
+  },
+  fabContainer: {
+    position: "absolute",
+    right: 16,
+    bottom: 140, // Above the bottom card
+    gap: 12,
+  },
+  fab: {
+    backgroundColor: "#fff",
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: "#f0f0f0",
+  },
+  markerContainer: {
+    backgroundColor: "#4C1D95",
+    padding: 8,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: "#fff",
+    shadowColor: "#000",
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  markerDot: {
+    width: 10,
+    height: 10,
+    backgroundColor: "#fff",
+    borderRadius: 5,
   },
 });

@@ -51,8 +51,8 @@ export default function OnboardingScreen() {
     if (currentIndex < slides.length - 1) {
       flatListRef.current.scrollToIndex({ index: currentIndex + 1 });
     } else {
-      // ✅ SAVE ONCE ON COMPLETION (THIS FIXES YOUR ISSUE)
-      await AsyncStorage.setItem("hasSeenWelcomeFlow", "true");
+      // ✅ SAVE ONCE ON COMPLETION
+      await AsyncStorage.setItem("has_seen_onboarding", "true");
 
       // go to welcome or login (your choice)
       router.replace("/(onboarding)/welcome");
@@ -91,7 +91,7 @@ export default function OnboardingScreen() {
         <Text
           style={styles.skip}
           onPress={async () => {
-            await AsyncStorage.setItem("hasSeenWelcomeFlow", "true");
+            await AsyncStorage.setItem("has_seen_onboarding", "true");
             router.replace("/(onboarding)/welcome");
           }}
         >

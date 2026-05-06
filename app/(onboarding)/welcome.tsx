@@ -39,7 +39,7 @@ export default function Welcome() {
 
   const handleContinue = async () => {
     // mark flow as completed
-    await AsyncStorage.setItem("hasSeenWelcomeFlow", "true");
+    await AsyncStorage.setItem("has_seen_welcome", "true");
 
     router.replace("/(auth)/login");
   };

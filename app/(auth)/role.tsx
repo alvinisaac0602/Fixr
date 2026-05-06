@@ -2,6 +2,7 @@ import { View, Text, Pressable, StyleSheet, Animated } from "react-native";
 import React, { useRef } from "react";
 import { router } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { supabase } from "@/lib/supabase";
 
 export default function Role() {
   const scaleUser = useRef(new Animated.Value(1)).current;
@@ -25,14 +26,30 @@ export default function Role() {
   const selectRole = async (role: "user" | "mechanic") => {
     console.log("Selected role:", role);
 
-    // OPTIONAL: store last selected role (for smoother UX)
-    await AsyncStorage.setItem("last_role", role);
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
 
-    // ROUTE BASED ON ROLE
-    if (role === "user") {
-      router.replace("/(user)/home");
-    } else {
-      router.replace("/(mechanic)/dashboard");
+      if (user) {
+        // ✅ PERSIST ROLE TO DATABASE
+        await supabase
+          .from("profiles")
+          .update({ role: role })
+          .eq("id", user.id);
+      }
+
+      // OPTIONAL: store last selected role (for smoother UX)
+      await AsyncStorage.setItem("last_role", role);
+
+      // ROUTE BASED ON ROLE
+      if (role === "user") {
+        router.replace("/(user)/home");
+      } else {
+        router.replace("/(mechanic)/dashboard");
+      }
+    } catch (err) {
+      console.error("Error setting role:", err);
     }
   };
 
