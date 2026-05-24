@@ -6,6 +6,10 @@ import {
   Pressable,
   ActivityIndicator,
   TextInput,
+  KeyboardAvoidingView,
+  Platform,
+  TouchableWithoutFeedback,
+  Keyboard,
 } from "react-native";
 import MapView, { Marker } from "react-native-maps";
 import MapViewDirections from "react-native-maps-directions";
@@ -232,7 +236,12 @@ const Home = () => {
   }
 
   return (
-    <View style={styles.container}>
+  <KeyboardAvoidingView
+    style={{ flex: 1 }}
+    behavior={Platform.OS === "ios" ? "padding" : "height"}
+  >
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+      <View style={styles.container}>
       <MapView
         ref={mapRef}
         style={StyleSheet.absoluteFillObject}
@@ -406,8 +415,10 @@ const Home = () => {
           </Pressable>
         </View>
       )}
-    </View>
-  );
+          </View>
+    </TouchableWithoutFeedback>
+  </KeyboardAvoidingView>
+);
 };
 
 export default Home;

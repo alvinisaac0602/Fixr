@@ -179,7 +179,7 @@ export default function EditProfile() {
         </View>
 
         {/* SWITCH ROLE */}
-        <Pressable
+        {/* <Pressable
   style={[
     styles.switchRole,
     {
@@ -192,7 +192,7 @@ export default function EditProfile() {
 >
           <Ionicons name="construct-outline" size={20} color="#fff" />
           <Text style={styles.switchText}>Switch to Mechanic Mode</Text>
-        </Pressable>
+        </Pressable> */}
 
         {/* LOGOUT */}
         <Pressable style={styles.logout} onPress={handleLogout}>
