@@ -23,8 +23,11 @@ const Dashboard = () => { // ✅ FIX: Capitalized component
 
   const mapRef = useRef<MapView>(null);
 
-  const [location, setLocation] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const [location, setLocation] = useState<any>({
+    latitude: 0.3156,
+    longitude: 32.5811,
+  });
+  const [loading, setLoading] = useState(false);
   const [online, setOnline] = useState(false);
   const [requests, setRequests] = useState<any[]>([]);
   const [selectedRequest, setSelectedRequest] = useState<any>(null);
@@ -98,13 +101,29 @@ const Dashboard = () => { // ✅ FIX: Capitalized component
     };
   }, []);
 
+  const hasAnimatedRef = useRef(false);
+
+  useEffect(() => {
+    if (location && mapRef.current && !hasAnimatedRef.current) {
+      if (location.latitude !== 0.3156 || location.longitude !== 32.5811) {
+        hasAnimatedRef.current = true;
+        mapRef.current.animateToRegion({
+          latitude: location.latitude,
+          longitude: location.longitude,
+          latitudeDelta: 0.01,
+          longitudeDelta: 0.01,
+        });
+      }
+    }
+  }, [location]);
+
   // 📡 FETCH REQUESTS
   useEffect(() => {
     const fetchRequests = async () => {
       const { data, error } = await supabase
         .from("requests")
         .select("*")
-        .eq("status", "pending");
+        .like("status", "pending%");
 
       if (!error) setRequests(data || []);
     };
@@ -143,16 +162,20 @@ const Dashboard = () => { // ✅ FIX: Capitalized component
   const acceptRequest = async (request: any) => {
     if (!user) return;
 
+    const cause = request.status.split("|")[1] || "";
+    const newStatus = "accepted|" + cause;
+
     const { error } = await supabase
       .from("requests")
       .update({
-        status: "accepted",
+        status: newStatus,
         mechanic_id: user.id,
       })
       .eq("id", request.id);
 
     if (!error) {
-      setSelectedRequest(request);
+      const updatedRequest = { ...request, status: newStatus };
+      setSelectedRequest(updatedRequest);
       fetchCustomer(request.user_id);
 
       setRequests((prev) =>
@@ -181,7 +204,7 @@ const Dashboard = () => { // ✅ FIX: Capitalized component
 
   const toggleOnline = () => setOnline((prev) => !prev);
 
-  if (loading || authLoading || !location) {
+  if (authLoading || !location) {
     return (
       <View style={styles.loader}>
         <ActivityIndicator size="large" />
@@ -316,6 +339,9 @@ const Dashboard = () => { // ✅ FIX: Capitalized component
             <Text>
               Phone: {customerProfile?.phone || "No phone"}
             </Text>
+            <Text style={{ marginTop: 6, color: "#4B5563" }}>
+              Reason: {selectedRequest.status.split("|")[1] || "Not specified"}
+            </Text>
 
             <Pressable
               onPress={cancelAcceptedRequest}
@@ -340,22 +366,30 @@ const Dashboard = () => { // ✅ FIX: Capitalized component
             </Text>
 
             <FlatList
-              data={requests}
+              data={requests.filter((item) => item.status?.startsWith("pending"))}
               keyExtractor={(item) => item.id}
-              renderItem={({ item }) => (
-                <View style={styles.requestCard}>
-                  <Text>User needs help 📍</Text>
+              renderItem={({ item }) => {
+                const cause = item.status.split("|")[1] || "Roadside assistance";
+                return (
+                  <View style={styles.requestCard}>
+                    <View style={{ flex: 1, paddingRight: 8 }}>
+                      <Text style={{ fontWeight: "bold" }}>User needs help 📍</Text>
+                      <Text style={{ fontSize: 13, color: "#6b7280", marginTop: 2 }}>
+                        Reason: {cause}
+                      </Text>
+                    </View>
 
-                  <Pressable
-                    style={styles.acceptBtn}
-                    onPress={() => acceptRequest(item)}
-                  >
-                    <Text style={{ color: "#fff" }}>
-                      Accept
-                    </Text>
-                  </Pressable>
-                </View>
-              )}
+                    <Pressable
+                      style={styles.acceptBtn}
+                      onPress={() => acceptRequest(item)}
+                    >
+                      <Text style={{ color: "#fff", fontWeight: "bold" }}>
+                        Accept
+                      </Text>
+                    </Pressable>
+                  </View>
+                );
+              }}
             />
           </>
         )}

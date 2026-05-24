@@ -29,21 +29,24 @@ const Activity = () => {
 
       setLoading(true);
 
-      // ACTIVE JOB
-      const { data: active } = await supabase
+      // FETCH ALL USER REQUESTS (Single optimized query)
+      const { data: requests } = await supabase
         .from("requests")
         .select("*")
         .eq("user_id", user.id)
-        .eq("status", "accepted")
-        .maybeSingle();
-
-      // HISTORY
-      const { data: past } = await supabase
-        .from("requests")
-        .select("*")
-        .eq("user_id", user.id)
-        .in("status", ["completed", "cancelled"])
         .order("created_at", { ascending: false });
+
+      const active = (requests || []).find((item) =>
+        item.status?.startsWith("accepted")
+      );
+
+      const past = (requests || []).filter(
+        (item) =>
+          item.status?.startsWith("completed") ||
+          item.status === "completed" ||
+          item.status?.startsWith("cancelled") ||
+          item.status === "cancelled"
+      );
 
       // 🔥 ENRICH DATA WITH PROFILES
       if (active?.mechanic_id) {
@@ -129,10 +132,14 @@ const Activity = () => {
               {activeJob.latitude}, {activeJob.longitude}
             </Text>
 
+            <Text style={{ color: theme.colors.text, marginTop: 4, fontSize: 14 }}>
+              Reason: {activeJob.status.split("|")[1] || "Not specified"}
+            </Text>
+
             <View style={styles.statusRow}>
               <Ionicons name="time-outline" size={16} color="#ff9500" />
               <Text style={styles.activeStatus}>
-                {activeJob.status}
+                {activeJob.status.split("|")[0]}
               </Text>
             </View>
           </View>
@@ -181,12 +188,12 @@ const Activity = () => {
                 <Text
                   style={[
                     styles.status,
-                    item.status === "completed"
+                    item.status?.startsWith("completed")
                       ? styles.completed
                       : styles.cancelled,
                   ]}
                 >
-                  {item.status}
+                  {item.status?.split("|")[0]}
                 </Text>
               </View>
             </Pressable>

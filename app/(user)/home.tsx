@@ -5,6 +5,7 @@ import {
   Text,
   Pressable,
   ActivityIndicator,
+  TextInput,
 } from "react-native";
 import MapView, { Marker } from "react-native-maps";
 import MapViewDirections from "react-native-maps-directions";
@@ -26,9 +27,13 @@ const Home = () => {
   const { user } = useAuth();
   const mapRef = useRef<MapView>(null);
 
-  const [location, setLocation] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const [location, setLocation] = useState<any>({
+    latitude: 0.3156,
+    longitude: 32.5811,
+  });
+  const [loading, setLoading] = useState(false);
   const [searching, setSearching] = useState(false);
+  const [breakdownCause, setBreakdownCause] = useState("");
 
   const [request, setRequest] = useState<Request | null>(null);
   const [mechanicLocation, setMechanicLocation] = useState<any>(null);
@@ -92,9 +97,25 @@ const Home = () => {
     };
   }, []);
 
+  const hasAnimatedRef = useRef(false);
+
+  useEffect(() => {
+    if (location && mapRef.current && !hasAnimatedRef.current) {
+      if (location.latitude !== 0.3156 || location.longitude !== 32.5811) {
+        hasAnimatedRef.current = true;
+        mapRef.current.animateToRegion({
+          latitude: location.latitude,
+          longitude: location.longitude,
+          latitudeDelta: 0.01,
+          longitudeDelta: 0.01,
+        });
+      }
+    }
+  }, [location]);
+
   // 🔧 REQUEST MECHANIC
   const requestMechanic = async () => {
-    if (!user || !location) return;
+    if (!user || !location || !breakdownCause.trim()) return;
 
     try {
       setSearching(true);
@@ -105,7 +126,7 @@ const Home = () => {
           user_id: user.id,
           latitude: location.latitude,
           longitude: location.longitude,
-          status: "pending",
+          status: "pending|" + breakdownCause.trim(),
         })
         .select()
         .single();
@@ -132,7 +153,7 @@ const Home = () => {
 
             setRequest(updated);
 
-            if (updated?.status === "accepted") {
+            if (updated?.status?.startsWith("accepted")) {
               setSearching(false);
 
               const { data: freshRequest } = await supabase
@@ -146,7 +167,7 @@ const Home = () => {
               }
             }
 
-            if (updated?.status === "cancelled") {
+            if (updated?.status?.startsWith("cancelled")) {
               setSearching(false);
               resetState();
             }
@@ -197,10 +218,11 @@ const Home = () => {
     setMechanicLocation(null);
     setMechanicProfile(null);
     setRouteInfo(null);
+    setBreakdownCause("");
   };
 
   // 🔒 SAFE LOADING (FIXED: prevents crash loop)
-  if (loading || !location?.latitude || !location?.longitude) {
+  if (!location?.latitude || !location?.longitude) {
     return (
       <View style={styles.loader}>
         <ActivityIndicator size="large" />
@@ -313,7 +335,7 @@ const Home = () => {
       )}
 
       {/* ACCEPTED */}
-      {request?.status === "accepted" && mechanicProfile && (
+      {request?.status?.startsWith("accepted") && mechanicProfile && (
         <View style={styles.bottomCard}>
           <Text style={{ fontWeight: "bold", fontSize: 16 }}>
             🚗 Mechanic Assigned
@@ -321,6 +343,9 @@ const Home = () => {
 
           <Text>Name: {mechanicProfile.full_name}</Text>
           <Text>Phone: {mechanicProfile.phone}</Text>
+          <Text style={{ marginTop: 6, color: "#4B5563" }}>
+            Reason: {request.status.split("|")[1] || "Not specified"}
+          </Text>
 
           {routeInfo && (
             <View style={styles.routeCard}>
@@ -340,9 +365,43 @@ const Home = () => {
       {/* DEFAULT */}
       {!searching && !request && (
         <View style={styles.bottomCard}>
-          <Text>Need a Mechanic?</Text>
+          <Text style={styles.cardTitle}>What caused the car to break down?</Text>
+          
+          <View style={styles.quickChoices}>
+            {["Flat Tire", "Dead Battery", "Engine Overheating", "Brakes Issue"].map((item) => (
+              <Pressable
+                key={item}
+                style={[
+                  styles.choiceBadge,
+                  breakdownCause === item && styles.choiceBadgeActive,
+                ]}
+                onPress={() => setBreakdownCause(item)}
+              >
+                <Text
+                  style={[
+                    styles.choiceText,
+                    breakdownCause === item && styles.choiceTextActive,
+                  ]}
+                >
+                  {item}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
 
-          <Pressable onPress={requestMechanic} style={styles.button}>
+          <TextInput
+            style={styles.textInput}
+            placeholder="Describe the issue (e.g. Engine won't start)"
+            placeholderTextColor="#9ca3af"
+            value={breakdownCause}
+            onChangeText={setBreakdownCause}
+          />
+
+          <Pressable
+            onPress={requestMechanic}
+            style={[styles.button, !breakdownCause.trim() && styles.buttonDisabled]}
+            disabled={!breakdownCause.trim()}
+          >
             <Text style={styles.buttonText}>Request Mechanic</Text>
           </Pressable>
         </View>
@@ -368,18 +427,79 @@ const styles = StyleSheet.create({
     width: "100%",
     backgroundColor: "white",
     padding: 20,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: -4 },
+    elevation: 10,
   },
 
   button: {
-    backgroundColor: "#000",
+    backgroundColor: "#4C1D95",
     padding: 15,
     marginTop: 10,
     borderRadius: 10,
   },
 
+  buttonDisabled: {
+    backgroundColor: "#9ca3af",
+  },
+
   buttonText: {
     color: "#fff",
     textAlign: "center",
+    fontWeight: "bold",
+  },
+
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: "bold",
+    marginBottom: 10,
+    color: "#1f2937",
+  },
+
+  quickChoices: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 12,
+  },
+
+  choiceBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: "#f3f4f6",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+  },
+
+  choiceBadgeActive: {
+    backgroundColor: "#4C1D95",
+    borderColor: "#4C1D95",
+  },
+
+  choiceText: {
+    fontSize: 13,
+    color: "#4b5563",
+  },
+
+  choiceTextActive: {
+    color: "#ffffff",
+    fontWeight: "bold",
+  },
+
+  textInput: {
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 12,
+    fontSize: 14,
+    color: "#1f2937",
+    backgroundColor: "#f9fafb",
   },
 
   searchOverlay: {
