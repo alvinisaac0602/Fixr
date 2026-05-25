@@ -257,6 +257,7 @@ const Home = () => {
         showsScale={true}
         loadingEnabled={true}
         mapPadding={{ top: 50, right: 10, bottom: 200, left: 10 }}
+        
       >
         {/* USER */}
         <Marker coordinate={location} title="You">

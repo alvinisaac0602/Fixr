@@ -43,7 +43,7 @@ const Edit = () => {
         .from("profiles")
         .select("*")
         .eq("id", user.id)
-        .single();
+        .maybeSingle();
 
       if (data) {
         setName(data.full_name || "");

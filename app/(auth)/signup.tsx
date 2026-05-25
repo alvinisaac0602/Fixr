@@ -35,9 +35,15 @@ const Signup = () => {
       setLoading(true);
 
       const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-      });
+  email,
+  password,
+  options: {
+    data: {
+      username,
+      phone,
+    },
+  },
+});
 
       if (error) {
         alert(error.message);
@@ -53,12 +59,12 @@ const Signup = () => {
           email: user.email,
           username,
           phone, // ✅ IMPORTANT
-          role: "user",
+          // role: "user",
           updated_at: new Date(),
         });
       }
 
-      router.replace("/(auth)/role");
+      router.replace("/(auth)/login")!;
     } catch (err) {
       console.log(err);
       alert("Something went wrong");
